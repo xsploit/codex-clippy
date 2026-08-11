@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex Clippy</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="assistant" aria-live="polite">
+      <section id="bubble" class="bubble interactive">
+        <div class="bubble-grain" aria-hidden="true"></div>
+        <header>
+          <div class="identity">
+            <span id="status-dot" class="status-dot starting"></span>
+            <div>
+              <strong>CLIPPY</strong>
+              <span id="status-label">Starting Codex…</span>
+            </div>
+          </div>
+          <div id="mode-switch" class="mode-switch" role="group" aria-label="Clippy mode">
+            <button type="button" data-mode="chatgpt" title="Regular ChatGPT conversation">CHAT</button>
+            <button type="button" data-mode="codex" title="Codex tools and computer work">CODEX</button>
+          </div>
+          <div class="window-actions">
+            <button id="chat-history" type="button" title="Chats" aria-label="Open chat history" aria-expanded="false">☰</button>
+            <button id="new-chat" type="button" title="New chat" aria-label="New chat">↻</button>
+            <button id="collapse" type="button" title="Collapse" aria-label="Collapse">—</button>
+            <button id="hide" type="button" title="Hide to tray" aria-label="Hide to tray">×</button>
+          </div>
+        </header>
+
+        <section id="chat-menu" class="chat-menu interactive" aria-label="Clippy chats" hidden>
+          <div class="chat-menu-heading">
+            <div>
+              <strong>CLIPPY CHATS</strong>
+              <span id="chat-menu-source">Saved ChatGPT conversations</span>
+            </div>
+            <button id="close-chat-menu" type="button" title="Close chats" aria-label="Close chat history">×</button>
+          </div>
+          <div id="chat-list" class="chat-list" role="list">
+            <p class="chat-list-empty">Loading chats…</p>
+          </div>
+          <button id="chat-menu-new" class="chat-menu-new" type="button">＋ New chat</button>
+        </section>
+
+        <div id="transcript" class="transcript" role="log">
+          <div class="assistant-message"><p>Bahha bro. It looks like you’re trying to boss around a repository. Want help?</p></div>
+        </div>
+
+        <div id="request-panel" class="request-panel" hidden></div>
+
+        <form id="composer">
+          <textarea id="prompt" rows="2" placeholder="Tell Clippy what to do…" aria-label="Message Codex Clippy"></textarea>
+          <div class="composer-footer">
+            <span>Ctrl + Enter to send</span>
+            <div>
+              <button id="mic" class="mic-button secondary" type="button" title="Dictate with local Whisper" aria-label="Start dictation" aria-pressed="false">🎙 Speak</button>
+              <button id="stop" class="secondary" type="button" hidden>Stop</button>
+              <button id="send" class="primary" type="submit">Do it</button>
+            </div>
+          </div>
+        </form>
+        <span class="bubble-tail" aria-hidden="true"></span>
+      </section>
+
+      <button id="open-bubble" class="open-bubble interactive" type="button" hidden>Need help?</button>
+    </main>
+    <script src="../node_modules/markdown-it/dist/markdown-it.min.js"></script>
+    <script src="markdown-renderer.js"></script>
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>

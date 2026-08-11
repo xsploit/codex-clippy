@@ -1,0 +1,675 @@
+:root {
+  color-scheme: light;
+  font-family: "Tahoma", "MS Sans Serif", system-ui, sans-serif;
+  --ink: #29270f;
+  --paper: #fffcae;
+  --paper-deep: #f4ef82;
+  --border: #34320f;
+  --violet: #655f99;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+body { color: var(--ink); }
+
+button, textarea { font: inherit; }
+button, textarea, .request-panel { user-select: text; }
+
+.bubble {
+  position: absolute;
+  right: 154px;
+  bottom: 104px;
+  width: 420px;
+  max-height: 382px;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--border);
+  border-radius: 13px;
+  background: linear-gradient(145deg, #ffffc7 0%, var(--paper) 58%, var(--paper-deep) 100%);
+  box-shadow: 5px 7px 0 rgba(33, 31, 7, 0.18), inset 0 0 0 2px rgba(255,255,255,.46);
+  overflow: visible;
+}
+
+.bubble-grain {
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  opacity: .09;
+  pointer-events: none;
+  background-image: radial-gradient(#534e21 .55px, transparent .65px);
+  background-size: 4px 4px;
+}
+
+.bubble-tail {
+  position: absolute;
+  right: -24px;
+  bottom: 37px;
+  width: 27px;
+  height: 28px;
+  overflow: hidden;
+}
+
+.bubble-tail::before {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  left: -15px;
+  top: 1px;
+  transform: rotate(45deg);
+  background: #f7f292;
+  border: 2px solid var(--border);
+}
+
+header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 12px 9px;
+  border-bottom: 1px solid rgba(52, 50, 15, .3);
+}
+
+.identity { display: flex; align-items: center; gap: 8px; }
+.identity > div { display: flex; flex-direction: column; line-height: 1.1; }
+.identity strong { font-size: 11px; letter-spacing: .16em; }
+.identity span:last-child { margin-top: 3px; font-size: 10px; opacity: .68; }
+
+.mode-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(52,50,15,.32);
+  border-radius: 6px;
+  background: rgba(255,255,255,.24);
+}
+.mode-switch button {
+  min-width: 39px;
+  height: 18px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+.mode-switch button.active { background: var(--violet); color: white; }
+.mode-switch button:disabled { opacity: .45; cursor: wait; }
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d5a931;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.55);
+}
+.status-dot.ready { background: #4f9b52; }
+.status-dot.busy { background: #5c6fc4; animation: pulse 1.1s infinite; }
+.status-dot.error, .status-dot.offline { background: #b94e42; }
+
+@keyframes pulse { 50% { opacity: .36; transform: scale(.8); } }
+
+.window-actions { display: flex; gap: 4px; }
+.window-actions button {
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(52,50,15,.42);
+  border-radius: 5px;
+  background: rgba(255,255,255,.32);
+  color: var(--ink);
+  line-height: 19px;
+  cursor: pointer;
+}
+.window-actions button:hover { background: rgba(255,255,255,.72); }
+.window-actions button:disabled { opacity: .42; cursor: wait; }
+
+.bubble:has(.chat-menu:not([hidden])) { height: 370px; }
+
+.chat-menu {
+  position: absolute;
+  z-index: 8;
+  inset: 51px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 290px;
+  padding: 11px;
+  border: 1px solid rgba(52, 50, 15, .48);
+  border-radius: 9px;
+  background: linear-gradient(150deg, rgba(255,255,216,.98), rgba(244,239,130,.98));
+  box-shadow: 0 5px 14px rgba(33, 31, 7, .17), inset 0 0 0 1px rgba(255,255,255,.5);
+}
+
+.chat-menu-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 2px 9px;
+}
+.chat-menu-heading > div { display: flex; flex-direction: column; }
+.chat-menu-heading strong { font-size: 11px; letter-spacing: .15em; }
+.chat-menu-heading span { margin-top: 2px; font-size: 9px; opacity: .58; }
+.chat-menu-heading button {
+  width: 25px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(52, 50, 15, .35);
+  border-radius: 5px;
+  background: rgba(255,255,255,.32);
+  cursor: pointer;
+}
+
+.chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+.chat-list-empty { margin: 24px 8px; text-align: center; font-size: 11px; opacity: .57; }
+.chat-row {
+  position: relative;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 8px 58px 8px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(52,50,15,.24);
+  border-radius: 7px;
+  background: rgba(255,255,255,.32);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.chat-row:hover { background: rgba(255,255,255,.66); }
+.chat-row.active { border-color: var(--violet); background: rgba(101,95,153,.13); }
+.chat-row-title, .chat-row-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-row-title { font-size: 11px; font-weight: 700; }
+.chat-row-preview { margin-top: 3px; font-size: 9px; opacity: .62; }
+.chat-row-time { position: absolute; top: 9px; right: 9px; font-size: 8px; opacity: .5; }
+.chat-row.active::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--violet);
+}
+.chat-menu-new {
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px;
+  border: 1px solid #49452b;
+  border-radius: 6px;
+  background: #6c67a4;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.chat-menu-new:hover { background: #57528f; }
+.chat-menu-new:disabled { opacity: .48; cursor: wait; }
+
+.transcript {
+  position: relative;
+  z-index: 1;
+  min-height: 94px;
+  max-height: 196px;
+  overflow: auto;
+  padding: 14px 16px 9px;
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 14px;
+  line-height: 1.42;
+  user-select: text;
+  scrollbar-width: thin;
+}
+
+.transcript p { margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.transcript .assistant-message { margin: 0 0 10px; overflow-wrap: anywhere; }
+.transcript .assistant-message > :first-child { margin-top: 0; }
+.transcript .assistant-message > :last-child { margin-bottom: 0; }
+.transcript .assistant-message h1,
+.transcript .assistant-message h2,
+.transcript .assistant-message h3,
+.transcript .assistant-message h4,
+.transcript .assistant-message h5,
+.transcript .assistant-message h6 {
+  margin: 12px 0 6px;
+  font-family: Tahoma, sans-serif;
+  line-height: 1.2;
+}
+.transcript .assistant-message h1 { font-size: 17px; }
+.transcript .assistant-message h2 { font-size: 15px; }
+.transcript .assistant-message h3,
+.transcript .assistant-message h4,
+.transcript .assistant-message h5,
+.transcript .assistant-message h6 { font-size: 13px; }
+.transcript .assistant-message ul,
+.transcript .assistant-message ol { margin: 6px 0 10px; padding-left: 22px; }
+.transcript .assistant-message li { margin: 3px 0; }
+.transcript .assistant-message li > p { margin: 0; }
+.transcript .assistant-message a {
+  color: #3d3981;
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.transcript .assistant-message a:hover { color: #211d67; }
+.transcript .assistant-message code {
+  padding: 1px 4px;
+  border: 1px solid rgba(70, 64, 31, .22);
+  border-radius: 4px;
+  background: rgba(255,255,255,.48);
+  font: 11px Consolas, "Cascadia Mono", monospace;
+  user-select: text;
+}
+.transcript .assistant-message pre {
+  max-width: 100%;
+  margin: 8px 0 10px;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid rgba(70, 64, 31, .34);
+  border-radius: 6px;
+  background: rgba(41, 39, 15, .88);
+  color: #fffed1;
+  user-select: text;
+}
+.transcript .assistant-message pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  white-space: pre;
+}
+.transcript .assistant-message blockquote {
+  margin: 8px 0 10px;
+  padding-left: 10px;
+  border-left: 3px solid rgba(101,95,153,.65);
+  opacity: .82;
+}
+.transcript .assistant-message blockquote p { margin-bottom: 5px; }
+.transcript .assistant-message hr { border: 0; border-top: 1px solid rgba(52,50,15,.28); }
+.transcript .assistant-message table {
+  display: block;
+  max-width: 100%;
+  margin: 8px 0 10px;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font: 11px Tahoma, sans-serif;
+}
+.transcript .assistant-message th,
+.transcript .assistant-message td { padding: 5px 7px; border: 1px solid rgba(52,50,15,.3); }
+.transcript .assistant-message th { background: rgba(101,95,153,.14); }
+.transcript .user-message { font-family: Tahoma, sans-serif; font-size: 12px; opacity: .67; }
+.transcript .user-message::before { content: "YOU  "; font-size: 9px; font-weight: 700; letter-spacing: .1em; }
+.transcript .error-message { color: #8c211d; font-family: Tahoma, sans-serif; font-size: 12px; }
+
+.request-panel {
+  position: relative;
+  z-index: 1;
+  margin: 0 12px 9px;
+  padding: 10px;
+  border: 1px solid #8e792b;
+  border-radius: 7px;
+  background: rgba(255, 244, 162, .86);
+  font-size: 11px;
+}
+.request-panel strong { display: block; margin-bottom: 5px; }
+.request-panel code { display: block; max-height: 74px; overflow: auto; white-space: pre-wrap; user-select: text; }
+.request-panel label { display: block; margin: 7px 0 3px; }
+.request-panel input {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #777042;
+  border-radius: 4px;
+  background: #fffed2;
+}
+.request-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+
+#composer {
+  position: relative;
+  z-index: 1;
+  padding: 8px 11px 10px;
+  border-top: 1px solid rgba(52,50,15,.22);
+}
+
+#prompt {
+  width: 100%;
+  min-height: 49px;
+  max-height: 92px;
+  resize: none;
+  padding: 8px 9px;
+  border: 1px solid #76713b;
+  border-radius: 6px;
+  outline: none;
+  background: rgba(255,255,225,.78);
+  color: #28250f;
+  font-size: 12px;
+  user-select: text;
+}
+#prompt:focus { border-color: var(--violet); box-shadow: 0 0 0 2px rgba(101,95,153,.17); }
+
+.composer-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; }
+.composer-footer > span { font-size: 9px; opacity: .52; }
+
+.primary, .secondary, .request-actions button {
+  min-width: 66px;
+  padding: 6px 10px;
+  border: 1px solid #49452b;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 11px;
+  box-shadow: inset 0 1px rgba(255,255,255,.56);
+}
+.primary { background: #6c67a4; color: white; }
+.primary:hover { background: #57528f; }
+.primary:disabled { opacity: .48; cursor: wait; }
+.secondary, .request-actions button { background: #f4f1bd; color: #3e3b1c; }
+.secondary:disabled { opacity: .48; cursor: wait; }
+.mic-button { min-width: 83px; }
+.mic-button.recording {
+  border-color: #8f2823;
+  background: #c84b43;
+  color: white;
+  animation: mic-pulse 1.15s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  50% { box-shadow: 0 0 0 4px rgba(200, 75, 67, .2), inset 0 1px rgba(255,255,255,.5); }
+}
+.request-actions .approve { background: #6c67a4; color: white; }
+
+.open-bubble {
+  position: absolute;
+  right: 131px;
+  bottom: 117px;
+  padding: 8px 12px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: 3px 4px 0 rgba(33,31,7,.18);
+  color: var(--ink);
+  font: 12px "Segoe Print", cursive;
+  cursor: pointer;
+}
+
+.clippy-character {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  cursor: grab;
+  touch-action: none;
+  isolation: isolate;
+}
+.clippy-character:active { cursor: grabbing !important; }
+
+.clippy-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.clippy-actor,
+.clippy-face,
+.clippy-eye,
+.clippy-pupil,
+.clippy-paper,
+.clippy-arm,
+.clippy-rig-body,
+.clippy-wire-part,
+.clippy-brow,
+.prop,
+.clippy-ground-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.clippy-wire-shape {
+  fill: url(#wire);
+  stroke: #34364e;
+  stroke-width: 11;
+  stroke-linejoin: round;
+}
+
+.clippy-eye-white {
+  fill: url(#eye);
+  stroke: #383e48;
+  stroke-width: 10;
+  stroke-linejoin: round;
+}
+
+.clippy-pupil-shape {
+  fill: #05060a;
+  stroke: #11121a;
+  stroke-width: 3;
+}
+
+.clippy-pupil-glint { fill: #fff; opacity: .78; }
+
+.wire-outline,
+.arm-outline {
+  fill: none;
+  stroke: #303044;
+  stroke-width: 13;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wire-main,
+.wire-inner,
+.arm-wire {
+  fill: none;
+  stroke: url(#wire);
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.clippy-brow {
+  fill: none;
+  stroke: #171722;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.clippy-lid {
+  fill: url(#wire);
+  stroke: #34364e;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform-box: fill-box;
+}
+.clippy-lid-top {
+  transform: translateY(-9px) scaleY(.14);
+  transform-origin: 50% 100%;
+}
+.clippy-lid-bottom {
+  transform: translateY(9px) scaleY(.14);
+  transform-origin: 50% 0%;
+}
+.clippy-arm { opacity: 0; }
+.clippy-hand {
+  fill: none;
+  stroke: #424262;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.prop { opacity: 0; }
+
+.clippy-vector.is-idle .clippy-actor { animation: clippy-breathe 3.6s ease-in-out infinite; }
+.clippy-vector.is-idle .clippy-wire-inner-loop { animation: clippy-idle-flex 3.6s ease-in-out infinite; transform-origin: 50% 92%; }
+.clippy-vector.is-idle .clippy-lid-top { animation: clippy-lid-top-blink 5.4s ease-in-out infinite; }
+.clippy-vector.is-idle .clippy-lid-bottom { animation: clippy-lid-bottom-blink 5.4s ease-in-out infinite; }
+.clippy-vector.is-idle .clippy-pupil { animation: clippy-look 7.4s ease-in-out infinite; }
+.clippy-vector.is-idle .clippy-brow { animation: clippy-brow-idle 3.6s ease-in-out infinite; }
+.clippy-vector.is-idle .clippy-ground-shadow { animation: clippy-shadow-breathe 3.6s ease-in-out infinite; }
+
+.clippy-vector.is-wave .clippy-actor { animation: clippy-wave-body 1.55s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-wave .clippy-arm-right { opacity: 1; animation: clippy-wave .38s ease-in-out infinite alternate; transform-origin: 0% 100%; }
+.clippy-vector.is-wave .clippy-lid-right.clippy-lid-top { animation: clippy-lid-top-wink 1.55s ease-in-out infinite; }
+.clippy-vector.is-wave .clippy-lid-right.clippy-lid-bottom { animation: clippy-lid-bottom-wink 1.55s ease-in-out infinite; }
+.clippy-vector.is-wave .clippy-pupil { transform: translate(-4px, -1px); }
+.clippy-vector.is-wave .clippy-brow-right { transform: translateY(-4px) rotate(7deg); }
+
+.clippy-vector.is-listening .clippy-actor { animation: clippy-listen-tilt 1.45s ease-in-out infinite alternate; transform-origin: 45% 92%; }
+.clippy-vector.is-listening .clippy-wire-inner-loop { animation: clippy-listen-stretch 1.45s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-listening .clippy-eye-right { animation: clippy-listen-eye 1.45s ease-in-out infinite alternate; }
+.clippy-vector.is-listening .prop-listen { opacity: 1; animation: clippy-signal 1.2s ease-out infinite; }
+.clippy-vector.is-listening .clippy-pupil { transform: translate(5px, -1px); }
+.clippy-vector.is-listening .clippy-brow-right { transform: translateY(-5px) rotate(-9deg); }
+
+.clippy-vector.is-thinking .clippy-actor { animation: clippy-think 2.15s ease-in-out infinite; transform-origin: 50% 92%; }
+.clippy-vector.is-thinking .clippy-wire-inner-loop { animation: clippy-think-loop 2.15s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-thinking .clippy-pupil-left { animation: clippy-think-gaze-left 2.15s ease-in-out infinite; }
+.clippy-vector.is-thinking .clippy-pupil-right { animation: clippy-think-gaze-right 2.15s ease-in-out infinite; }
+.clippy-vector.is-thinking .prop-question { opacity: 1; animation: clippy-question 1.6s ease-in-out infinite; }
+.clippy-vector.is-thinking .clippy-brow-left { transform: translateY(-5px) rotate(-10deg); }
+.clippy-vector.is-thinking .clippy-brow-right { transform: translateY(2px) rotate(-11deg); }
+
+.clippy-vector.is-processing .clippy-actor { animation: clippy-processing 1.4s ease-in-out infinite; }
+.clippy-vector.is-processing .clippy-paper { animation: clippy-paper-rustle .58s ease-in-out infinite alternate; }
+.clippy-vector.is-processing .clippy-pupil-left { animation: clippy-scan-left 1.05s ease-in-out infinite; }
+.clippy-vector.is-processing .clippy-pupil-right { animation: clippy-scan-right 1.05s ease-in-out infinite; }
+.clippy-vector.is-processing .clippy-wire-inner-loop { animation: clippy-processing-loop .7s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-processing .prop-processing { opacity: 1; animation: clippy-processing-orbit 1.15s linear infinite; }
+.clippy-vector.is-processing .processing-core { animation: clippy-core-pulse .58s ease-in-out infinite alternate; }
+
+.clippy-vector.is-searching .prop-search { opacity: 1; animation: clippy-search 1.65s ease-in-out infinite; transform-origin: 20% 20%; }
+.clippy-vector.is-searching .clippy-pupil { animation: clippy-search-gaze 1.65s ease-in-out infinite; }
+.clippy-vector.is-searching .clippy-eye-left { animation: clippy-search-eye-left 1.65s ease-in-out infinite; }
+.clippy-vector.is-searching .clippy-arm-right { opacity: 1; animation: clippy-search-arm 1.65s ease-in-out infinite; transform-origin: 0% 100%; }
+
+.clippy-vector.is-working .prop-pencil { opacity: 1; animation: clippy-write .34s ease-in-out infinite alternate; transform-origin: 0% 0%; }
+.clippy-vector.is-working .clippy-paper { animation: clippy-paper-rustle .7s ease-in-out infinite alternate; }
+.clippy-vector.is-working .clippy-pupil { transform: translate(2px, 6px); }
+.clippy-vector.is-working .clippy-wire-inner-loop { animation: clippy-working-loop .68s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-working .clippy-actor { animation: clippy-working-body .68s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-working .clippy-brow-left,
+.clippy-vector.is-working .clippy-brow-right { transform: translateY(3px) rotate(-5deg); }
+
+.clippy-vector.is-explaining .clippy-arm-left { opacity: 1; animation: clippy-point .62s ease-in-out infinite alternate; transform-origin: 100% 50%; }
+.clippy-vector.is-explaining .clippy-actor { animation: clippy-explain 1.35s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-explaining .clippy-wire-arch { animation: clippy-explain-arch 1.35s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+.clippy-vector.is-explaining .clippy-pupil { animation: clippy-explain-gaze 2.7s ease-in-out infinite; }
+
+.clippy-vector.is-success .clippy-actor { animation: clippy-celebrate 1.05s cubic-bezier(.2,.8,.3,1) infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-success .clippy-wire-outer-loop { animation: clippy-success-stretch 1.05s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-success .clippy-eye { animation: clippy-success-eyes 1.05s ease-in-out infinite; }
+.clippy-vector.is-success .prop-sparkles { opacity: 1; animation: clippy-sparkle .7s ease-in-out infinite alternate; }
+.clippy-vector.is-success .clippy-arm-left,
+.clippy-vector.is-success .clippy-arm-right { opacity: 1; }
+.clippy-vector.is-success .clippy-arm-left { transform: rotate(-32deg); transform-origin: 100% 50%; }
+.clippy-vector.is-success .clippy-arm-right { transform: rotate(28deg); transform-origin: 0% 100%; }
+.clippy-vector.is-success .clippy-ground-shadow { animation: clippy-jump-shadow 1.05s ease-in-out infinite; }
+
+.clippy-vector.is-error .clippy-actor { animation: clippy-error-recoil 1.15s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-error .prop-alert { opacity: 1; animation: clippy-alert .42s ease-in-out infinite alternate; }
+.clippy-vector.is-error .clippy-eye { animation: clippy-error-eyes 1.15s ease-in-out infinite; }
+.clippy-vector.is-error .clippy-pupil { animation: clippy-error-pupil 1.15s ease-in-out infinite; }
+.clippy-vector.is-error .clippy-wire-inner-loop { animation: clippy-error-loop 1.15s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-error .clippy-brow-left { transform: translateY(5px) rotate(17deg); }
+.clippy-vector.is-error .clippy-brow-right { transform: translateY(5px) rotate(-17deg); }
+
+.clippy-vector.is-clicked .clippy-actor { animation: clippy-squish .42s cubic-bezier(.2,.9,.3,1.35) 2; transform-origin: 50% 100%; }
+.clippy-vector.is-clicked .clippy-wire-outer-loop { animation: clippy-click-loop .42s ease-in-out 2; transform-origin: 50% 100%; }
+.clippy-vector.is-clicked .clippy-eye { animation: clippy-wide-eye .42s ease-in-out 2 alternate; }
+
+.clippy-vector.is-look-down .clippy-pupil { transform: translateY(7px); }
+.clippy-vector.is-look-down .clippy-eye { transform: translateY(2px); }
+.clippy-vector.is-look-down .clippy-actor { animation: clippy-look-down 1.35s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+
+.clippy-vector.is-sleeping .clippy-actor { animation: clippy-sleep 2.8s ease-in-out infinite; transform-origin: 40% 100%; }
+.clippy-vector.is-sleeping .clippy-wire-arch { animation: clippy-sleep-arch 2.8s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-sleeping .clippy-wire-inner-loop { animation: clippy-sleep-loop 2.8s ease-in-out infinite; transform-origin: 50% 100%; }
+.clippy-vector.is-sleeping .clippy-eye { transform: translateY(5px) scaleY(.92); }
+.clippy-vector.is-sleeping .clippy-lid { opacity: 1; transform: none; }
+.clippy-vector.is-sleeping .clippy-pupil { opacity: 1; transform: scaleY(.72); }
+.clippy-vector.is-sleeping .prop-zzz { opacity: 1; animation: clippy-zzz 2.2s ease-in-out infinite; }
+
+.clippy-vector.is-yes .clippy-actor { animation: clippy-nod .62s ease-in-out 3; transform-origin: 50% 100%; }
+.clippy-vector.is-yes .clippy-eye { animation: clippy-nod-eyes .62s ease-in-out 3; }
+.clippy-vector.is-yes .clippy-pupil { transform: translateY(3px); }
+
+@keyframes clippy-breathe { 0%,100% { transform: translateY(0) rotate(0) scaleY(1); } 48% { transform: translateY(-4px) rotate(.8deg) scaleY(1.012); } }
+@keyframes clippy-idle-flex { 0%,100% { transform: scale(1); } 48% { transform: scale(.985,1.018) translateY(-1px); } }
+@keyframes clippy-shadow-breathe { 0%,100% { transform: scaleX(1); opacity: .2; } 48% { transform: scaleX(.9); opacity: .14; } }
+@keyframes clippy-lid-top-blink { 0%,44%,48%,100% { opacity: 0; transform: translateY(-9px) scaleY(.14); } 46% { opacity: 1; transform: translateY(0) scaleY(1); } }
+@keyframes clippy-lid-bottom-blink { 0%,44%,48%,100% { opacity: 0; transform: translateY(9px) scaleY(.14); } 46% { opacity: 1; transform: translateY(0) scaleY(1); } }
+@keyframes clippy-look { 0%,18%,100% { transform: translate(0); } 25%,43% { transform: translate(-5px,1px); } 52%,72% { transform: translate(5px,-2px); } 78%,88% { transform: translate(0,3px); } }
+@keyframes clippy-brow-idle { 0%,100% { transform: translateY(0); } 48% { transform: translateY(-1px); } }
+@keyframes clippy-wave-body { 0%,100% { transform: translateY(0) rotate(0); } 12% { transform: translateY(-7px) rotate(-2deg) scale(1.02,.98); } 35%,78% { transform: translateY(-3px) rotate(2deg); } }
+@keyframes clippy-wave { from { transform: rotate(-24deg); } to { transform: rotate(28deg); } }
+@keyframes clippy-lid-top-wink { 0%,58%,70%,100% { opacity: 0; transform: translateY(-9px) scaleY(.14); } 64% { opacity: 1; transform: translateY(0) scaleY(1); } }
+@keyframes clippy-lid-bottom-wink { 0%,58%,70%,100% { opacity: 0; transform: translateY(9px) scaleY(.14); } 64% { opacity: 1; transform: translateY(0) scaleY(1); } }
+@keyframes clippy-listen-tilt { from { transform: rotate(-2deg) translateY(0); } to { transform: rotate(6deg) translate(4px,-4px); } }
+@keyframes clippy-listen-stretch { from { transform: scale(1); } to { transform: scale(.94,1.04) translateX(2px); } }
+@keyframes clippy-listen-eye { from { transform: translate(0); } to { transform: translate(4px,-3px) scale(1.04); } }
+@keyframes clippy-signal { 0% { transform: scale(.72); opacity: 0; } 35%,65% { opacity: 1; } 100% { transform: scale(1.12); opacity: 0; } }
+@keyframes clippy-think { 0%,100% { transform: rotate(0) translateY(0); } 45%,62% { transform: rotate(-5deg) translate(-3px,-5px); } }
+@keyframes clippy-think-loop { 0%,100% { transform: skewX(0); } 48% { transform: skewX(-5deg) scaleY(.97); } }
+@keyframes clippy-think-gaze-left { 0%,100% { transform: translate(0); } 42%,66% { transform: translate(3px,-4px); } }
+@keyframes clippy-think-gaze-right { 0%,100% { transform: translate(0); } 42%,66% { transform: translate(2px,-4px); } }
+@keyframes clippy-question { 0%,100% { transform: translateY(3px) rotate(4deg) scale(.94); } 50% { transform: translateY(-8px) rotate(-5deg) scale(1.06); } }
+@keyframes clippy-processing { 0%,100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-2px) rotate(-1deg); } 75% { transform: translateX(2px) rotate(1deg); } }
+@keyframes clippy-paper-rustle { from { transform: skewY(-.7deg) translateX(-1px); } to { transform: skewY(.7deg) translateX(2px); } }
+@keyframes clippy-scan-left { 0%,100% { transform: translate(-6px,1px); } 50% { transform: translate(6px,1px); } }
+@keyframes clippy-scan-right { 0%,100% { transform: translate(6px,1px); } 50% { transform: translate(-6px,1px); } }
+@keyframes clippy-processing-loop { from { transform: scale(.96,1.025); } to { transform: scale(1.025,.98); } }
+@keyframes clippy-processing-orbit { to { transform: rotate(360deg); } }
+@keyframes clippy-core-pulse { to { transform: scale(1.35); opacity: .65; } }
+@keyframes clippy-search { 0%,100% { transform: translate(-6px,-5px) rotate(-9deg); } 50% { transform: translate(10px,7px) rotate(12deg); } }
+@keyframes clippy-search-gaze { 0%,100% { transform: translate(-6px,3px); } 50% { transform: translate(7px,-1px); } }
+@keyframes clippy-search-eye-left { 0%,100% { transform: scaleY(.96); } 50% { transform: translateY(2px) scaleY(.88); } }
+@keyframes clippy-search-arm { 0%,100% { transform: rotate(20deg) translate(2px,5px); } 50% { transform: rotate(34deg) translate(6px,8px); } }
+@keyframes clippy-write { from { transform: rotate(-10deg) translate(-3px,-3px); } to { transform: rotate(9deg) translate(5px,4px); } }
+@keyframes clippy-working-loop { from { transform: scaleY(1.01); } to { transform: scaleY(.97) translateY(2px); } }
+@keyframes clippy-working-body { from { transform: rotate(-1deg); } to { transform: rotate(1.5deg) translateY(2px); } }
+@keyframes clippy-point { from { transform: rotate(-10deg); } to { transform: rotate(9deg) translateY(-2px); } }
+@keyframes clippy-explain { from { transform: translateY(0) rotate(-1.5deg); } to { transform: translateY(-4px) rotate(2.5deg); } }
+@keyframes clippy-explain-arch { from { transform: scaleX(.98); } to { transform: scaleX(1.035) translateY(-2px); } }
+@keyframes clippy-explain-gaze { 0%,40%,100% { transform: translate(-4px,-1px); } 55%,82% { transform: translate(3px,0); } }
+@keyframes clippy-celebrate { 0%,100% { transform: translateY(0) scale(1.03,.95); } 20% { transform: translateY(4px) scale(1.08,.9); } 48% { transform: translateY(-15px) scale(.96,1.06); } 72% { transform: translateY(-5px) scale(1,1); } }
+@keyframes clippy-success-stretch { 0%,100% { transform: scale(1.04,.96); } 48% { transform: scale(.94,1.08); } }
+@keyframes clippy-success-eyes { 0%,100% { transform: scale(1); } 48% { transform: scale(1.11) translateY(-2px); } }
+@keyframes clippy-sparkle { from { transform: scale(.72) rotate(-8deg); opacity: .35; } to { transform: scale(1.12) rotate(7deg); opacity: 1; } }
+@keyframes clippy-jump-shadow { 0%,100% { transform: scaleX(1); opacity: .2; } 48% { transform: scaleX(.66); opacity: .1; } }
+@keyframes clippy-error-recoil { 0%,100% { transform: translateX(0) rotate(0); } 12% { transform: translateY(6px) scale(1.08,.9); } 30% { transform: translate(-9px,-3px) rotate(-4deg); } 44% { transform: translate(8px,-2px) rotate(4deg); } 58% { transform: translate(-5px,0) rotate(-2deg); } 72% { transform: translate(3px,0) rotate(1deg); } }
+@keyframes clippy-alert { from { transform: scale(.82) rotate(-6deg); } to { transform: scale(1.1) rotate(6deg); } }
+@keyframes clippy-error-eyes { 0%,100% { transform: scale(1); } 16%,56% { transform: scale(1.12) translateY(-2px); } }
+@keyframes clippy-error-pupil { 0%,100% { transform: scale(1); } 16%,56% { transform: scale(.68); } }
+@keyframes clippy-error-loop { 0%,100% { transform: skewX(0); } 30% { transform: skewX(-7deg) scaleY(.96); } 44% { transform: skewX(7deg) scaleY(.96); } }
+@keyframes clippy-squish { 0%,100% { transform: scale(1); } 45% { transform: scale(1.1,.8) translateY(14px); } }
+@keyframes clippy-click-loop { 45% { transform: scale(1.12,.75) translateY(10px); } }
+@keyframes clippy-wide-eye { to { transform: scale(1.17); } }
+@keyframes clippy-look-down { from { transform: rotate(0); } to { transform: rotate(4deg) translateY(5px); } }
+@keyframes clippy-sleep { 0%,100% { transform: rotate(-7deg) translateY(5px); } 50% { transform: rotate(-9deg) translateY(9px) scaleY(.97); } }
+@keyframes clippy-sleep-arch { 0%,100% { transform: scaleY(.96) rotate(-2deg); } 50% { transform: scaleY(.9) rotate(-5deg) translateY(4px); } }
+@keyframes clippy-sleep-loop { 0%,100% { transform: scale(1.03,.95); } 50% { transform: scale(1.07,.9) translateY(6px); } }
+@keyframes clippy-zzz { 0% { transform: translate(-4px,7px) scale(.8); opacity: 0; } 28%,72% { opacity: 1; } 100% { transform: translate(8px,-13px) scale(1.1); opacity: 0; } }
+@keyframes clippy-nod { 0%,100% { transform: rotate(0) translateY(0); } 45% { transform: rotate(2deg) translateY(10px) scaleY(.95); } }
+@keyframes clippy-nod-eyes { 45% { transform: translateY(4px) scaleY(.88); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .clippy-vector * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+}
+
+[hidden] { display: none !important; }

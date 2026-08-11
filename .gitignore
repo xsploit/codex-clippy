@@ -1,0 +1,9 @@
+node_modules/
+dist/
+tmp/
+.codex-remote-attachments/
+.env
+.env.*
+*.log
+clippy-portable.png
+stt-smoke.wav

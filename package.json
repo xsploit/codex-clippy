@@ -1,0 +1,45 @@
+{
+  "name": "codex-clippy",
+  "version": "0.8.0",
+  "description": "A desktop Clippy-style assistant powered by the Codex app server.",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/main.cjs && node --check src/app-server.cjs && node --check src/chat-history.cjs && node --check src/chatgpt-history.cjs && node --check src/chatgpt-page-client.cjs && node --check src/chatgpt-page-preload.cjs && node --check src/chatgpt-transport.cjs && node --check src/codex-desktop-transcriber.cjs && node --check src/realtime-transcriber.cjs && node --check src/whisper.cjs && node --check src/preload.cjs && node --check src/markdown-renderer.js && node --check src/clippy-svg.js && node --check src/renderer.js",
+    "test": "node --test test/*.test.cjs",
+    "dist": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.subsect.codexclippy",
+    "productName": "Codex Clippy",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json",
+      "README.md",
+      "node_modules/clippyjs/dist/**/*",
+      "node_modules/markdown-it/dist/markdown-it.min.js"
+    ],
+    "extraResources": [
+      {
+        "from": "src/whisper-worker.py",
+        "to": "whisper-worker.py"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.png",
+      "artifactName": "Codex-Clippy-${version}.exe"
+    }
+  },
+  "dependencies": {
+    "clippyjs": "0.1.0",
+    "markdown-it": "^14.3.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "electron": "43.3.0",
+    "electron-builder": "26.0.12",
+    "svg-pathdata": "^6.0.3"
+  }
+}
