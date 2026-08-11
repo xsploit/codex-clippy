@@ -25,6 +25,7 @@
           </div>
           <div class="window-actions">
             <button id="chat-history" type="button" title="Chats" aria-label="Open chat history" aria-expanded="false">☰</button>
+            <button id="settings" type="button" title="Settings" aria-label="Open Clippy settings" aria-expanded="false">⚙</button>
             <button id="new-chat" type="button" title="New chat" aria-label="New chat">↻</button>
             <button id="collapse" type="button" title="Collapse" aria-label="Collapse">—</button>
             <button id="hide" type="button" title="Hide to tray" aria-label="Hide to tray">×</button>
@@ -43,6 +44,73 @@
             <p class="chat-list-empty">Loading chats…</p>
           </div>
           <button id="chat-menu-new" class="chat-menu-new" type="button">＋ New chat</button>
+        </section>
+
+        <section id="settings-menu" class="settings-menu interactive" aria-label="Clippy settings" hidden>
+          <div class="settings-menu-heading">
+            <div>
+              <strong>CLIPPY SETTINGS</strong>
+              <span>Saved instantly</span>
+            </div>
+            <button id="close-settings" type="button" title="Close settings" aria-label="Close settings">×</button>
+          </div>
+          <div class="settings-scroll">
+            <fieldset>
+              <legend>WINDOW</legend>
+              <label class="setting-row">
+                <span><strong>Always on top</strong><small>Keep Clippy above your other windows</small></span>
+                <input id="setting-always-on-top" type="checkbox" />
+              </label>
+              <label class="setting-row">
+                <span><strong>Show on launch</strong><small>Otherwise Clippy starts quietly in the tray</small></span>
+                <input id="setting-show-on-launch" type="checkbox" />
+              </label>
+              <label class="setting-row">
+                <span><strong>Open speech bubble</strong><small>Start expanded instead of character-only</small></span>
+                <input id="setting-bubble-open" type="checkbox" />
+              </label>
+              <label class="setting-row">
+                <span><strong>Animate Clippy</strong><small>Play reactions while Clippy works</small></span>
+                <input id="setting-animations" type="checkbox" />
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>STARTUP</legend>
+              <label class="setting-row">
+                <span><strong>Start with Windows</strong><small id="login-setting-detail">Launch Clippy after signing in</small></span>
+                <input id="setting-open-at-login" type="checkbox" />
+              </label>
+              <label class="setting-row select-row">
+                <span><strong>Starting mode</strong><small>Choose Chat, Codex, or your last mode</small></span>
+                <select id="setting-startup-mode" aria-label="Starting mode">
+                  <option value="last">Last used</option>
+                  <option value="chatgpt">Chat</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>CHATGPT</legend>
+              <label class="setting-row">
+                <span><strong>Show ChatGPT.com chats</strong><small>Merge signed-in web history into Clippy Chats</small></span>
+                <input id="setting-sync-web-history" type="checkbox" />
+              </label>
+              <label class="setting-row select-row">
+                <span><strong>Web history limit</strong><small>Maximum recent web chats shown</small></span>
+                <select id="setting-web-history-limit" aria-label="Web history limit">
+                  <option value="10">10 chats</option>
+                  <option value="25">25 chats</option>
+                  <option value="50">50 chats</option>
+                </select>
+              </label>
+            </fieldset>
+          </div>
+          <div class="settings-footer">
+            <span id="settings-version">Codex Clippy</span>
+            <span id="settings-saved" role="status">Ready</span>
+          </div>
         </section>
 
         <div id="transcript" class="transcript" role="log">

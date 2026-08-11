@@ -16,6 +16,7 @@ A tiny, always-on-top Windows assistant with a resolution-independent, dynamical
 - File picker, drag-and-drop attachments, image previews, and direct clipboard image pasting
 - Existing ChatGPT.com sidebar conversations in Clippy's chat menu, with real history restoration and continuation
 - Separate persistent conversation lists for ChatGPT and Codex
+- Persistent settings for always-on-top behavior, Windows startup, launch visibility, starting mode, animations, and ChatGPT.com history
 - Markdown rendering, microphone dictation, hosted GPT transcription, and local Whisper fallback
 - Idle, listening, thinking, searching, working, explaining, success, error, sleeping, and interaction animations
 
@@ -38,6 +39,8 @@ The compact controls below the composer come directly from each live backend. Ch
 Use **＋** to select one or more files, drop files anywhere on the composer, or paste an image directly from the clipboard. Codex receives images as native `localImage` inputs and other files as path-aware mentions. Chat mode uploads attachments through the signed-in ChatGPT file service and sends image asset pointers or document attachment metadata with the conversation.
 
 The ☰ button opens the separate chat list for the active mode, where earlier conversations can be restored and continued. In Chat mode it merges local Clippy chats with the signed-in account's current ChatGPT.com sidebar and labels their source as **CLIPPY** or **WEB**. Selecting a web chat loads its active message branch and continuation node, so the next message continues the original conversation rather than creating a copy. New ChatGPT chats are materialized locally as soon as they are created, before the first user message.
+
+The ⚙ button opens Clippy Settings. Changes save immediately: always-on-top and animation changes apply live, while launch visibility, starting bubble state, and starting mode apply the next time Clippy opens. The packaged build can also start with Windows. ChatGPT.com history syncing and its menu limit can be controlled independently without affecting Clippy's local chats.
 
 Assistant responses render Markdown with styled headings, lists, links, tables, blockquotes, and fenced code. Raw HTML stays disabled, and web links open in the system browser instead of navigating the companion window.
 

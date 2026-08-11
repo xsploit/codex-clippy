@@ -18,7 +18,17 @@ const {
 const { ChatGptTransport } = require('./chatgpt-transport.cjs');
 const { CodexDesktopTranscriber } = require('./codex-desktop-transcriber.cjs');
 const { OpenAIRealtimeTranscriber } = require('./realtime-transcriber.cjs');
+const { DEFAULT_PREFERENCES, normalizePreferences, updateUserSettings } = require('./preferences.cjs');
 const { WhisperTranscriber } = require('./whisper.cjs');
+
+// A launcher or screenshot harness can close its console while Electron keeps
+// running. Ignore only that closed-pipe condition so diagnostic logging can
+// never take down the desktop companion.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on?.('error', (error) => {
+    if (error?.code !== 'EPIPE') setImmediate(() => { throw error; });
+  });
+}
 
 const WINDOW_WIDTH = 620;
 const WINDOW_HEIGHT = 560;
@@ -49,12 +59,6 @@ let activeChatGptChatId = null;
 const liveRequests = new Map();
 let preferences;
 
-const DEFAULT_PREFERENCES = {
-  mode: 'chatgpt',
-  chatgpt: { selection: 'auto', model: 'auto', effort: null },
-  codex: { model: null, effort: null, permissions: ':workspace' },
-};
-
 function settingsPath() {
   return path.join(app.getPath('userData'), 'clippy-state.json');
 }
@@ -69,20 +73,44 @@ function preferencesPath() {
 
 function loadPreferences() {
   try {
-    const parsed = JSON.parse(fs.readFileSync(preferencesPath(), 'utf8'));
-    return {
-      mode: parsed.mode === 'codex' ? 'codex' : 'chatgpt',
-      chatgpt: { ...DEFAULT_PREFERENCES.chatgpt, ...(parsed.chatgpt || {}) },
-      codex: { ...DEFAULT_PREFERENCES.codex, ...(parsed.codex || {}) },
-    };
+    return normalizePreferences(JSON.parse(fs.readFileSync(preferencesPath(), 'utf8')));
   } catch {
-    return structuredClone(DEFAULT_PREFERENCES);
+    return normalizePreferences(DEFAULT_PREFERENCES);
   }
 }
 
 function savePreferences() {
   fs.mkdirSync(path.dirname(preferencesPath()), { recursive: true });
   fs.writeFileSync(preferencesPath(), JSON.stringify(preferences, null, 2));
+}
+
+function loginExecutablePath() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+
+function applyRuntimeSettings() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(preferences.settings.alwaysOnTop, preferences.settings.alwaysOnTop ? 'floating' : 'normal');
+  }
+  if (app.isPackaged) {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: preferences.settings.openAtLogin,
+        path: loginExecutablePath(),
+        args: [],
+      });
+    } catch (error) {
+      console.log(`[settings] Could not update login startup: ${error.message}`);
+    }
+  }
+}
+
+function settingsPayload() {
+  return {
+    ...preferences.settings,
+    version: app.getVersion(),
+    loginSupported: app.isPackaged,
+  };
 }
 
 function attachmentMimeType(filePath, provided = '') {
@@ -195,10 +223,12 @@ async function listClippyChats() {
     const stored = readChatGptState(chatGptHistoryPath());
     const local = stored.chats.map((chat) => chatGptSummary(chat, stored.activeId));
     let remote = [];
-    try {
-      remote = await chatgpt.listConversations(50);
-    } catch (error) {
-      console.log(`[chatgpt] Web history unavailable: ${error.message}`);
+    if (preferences.settings.syncWebHistory) {
+      try {
+        remote = await chatgpt.listConversations(preferences.settings.webHistoryLimit);
+      } catch (error) {
+        console.log(`[chatgpt] Web history unavailable: ${error.message}`);
+      }
     }
     const localByConversation = new Map(local.filter((chat) => chat.conversationId).map((chat) => [chat.conversationId, chat]));
     const mergedRemote = remote.map((chat) => {
@@ -313,7 +343,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.setAlwaysOnTop(true, 'floating');
+  applyRuntimeSettings();
   session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) => {
     return webContents === mainWindow.webContents && permission === 'media' && details.mediaType === 'audio';
   });
@@ -330,7 +360,7 @@ function createWindow() {
     console.error(`[renderer] process gone: ${details.reason}`);
   });
   mainWindow.once('ready-to-show', () => {
-    mainWindow.showInactive();
+    if (preferences.settings.showOnLaunch || process.env.CODEX_CLIPPY_CAPTURE_PATH) mainWindow.showInactive();
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
     const capturePath = process.env.CODEX_CLIPPY_CAPTURE_PATH;
     if (capturePath) {
@@ -375,11 +405,42 @@ function createWindow() {
               await new Promise((resolve) => setTimeout(resolve, 500));
             }
           }
+          if (process.env.CODEX_CLIPPY_DEMO_OPEN_SETTINGS === '1') {
+            let rendererReady = false;
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              rendererReady = await mainWindow.webContents.executeJavaScript(
+                `document.documentElement.dataset.clippyRendererReady === 'true'`,
+              );
+              if (rendererReady) break;
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            if (!rendererReady) throw new Error('Renderer was not ready for settings capture.');
+            await mainWindow.webContents.executeJavaScript(`document.querySelector('#settings')?.click()`);
+            let settingsReady = false;
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+              settingsReady = await mainWindow.webContents.executeJavaScript(`(() => {
+                const menu = document.querySelector('#settings-menu');
+                return menu && !menu.hidden && document.querySelector('#settings-version')?.textContent.includes('v');
+              })()`);
+              if (settingsReady) break;
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            if (!settingsReady) throw new Error('Settings menu did not open for capture.');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(capturePath, image.toPNG());
           console.log(`[capture] ${capturePath}`);
+          if (process.env.CODEX_CLIPPY_EXIT_AFTER_CAPTURE === '1') {
+            quitting = true;
+            app.quit();
+          }
         } catch (error) {
           console.error(`[capture] ${error.stack || error.message}`);
+          if (process.env.CODEX_CLIPPY_EXIT_AFTER_CAPTURE === '1') {
+            quitting = true;
+            app.quit();
+          }
         }
       }, 3_000);
     }
@@ -409,6 +470,7 @@ function createTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Clippy', click: () => mainWindow.showInactive() },
     { label: 'New chat', click: () => newChat() },
+    { label: 'Settings…', click: () => { mainWindow.showInactive(); emit({ type: 'open-settings' }); } },
     { type: 'separator' },
     { label: 'ChatGPT chat', type: 'radio', checked: state.mode === 'chatgpt', click: () => setMode('chatgpt') },
     { label: 'Codex tools', type: 'radio', checked: state.mode === 'codex', click: () => setMode('codex') },
@@ -541,6 +603,15 @@ async function setMode(mode, notify = true) {
 }
 
 ipcMain.handle('clippy:get-state', () => state);
+ipcMain.handle('clippy:get-settings', () => settingsPayload());
+ipcMain.handle('clippy:set-settings', (_event, patch) => {
+  preferences = updateUserSettings(preferences, patch);
+  savePreferences();
+  applyRuntimeSettings();
+  const settings = settingsPayload();
+  emit({ type: 'settings', settings });
+  return settings;
+});
 ipcMain.handle('clippy:get-composer-options', (_event, mode) => getComposerOptions(mode));
 ipcMain.handle('clippy:set-composer-settings', async (_event, mode, settings = {}) => {
   if (mode === 'chatgpt') {
@@ -710,7 +781,7 @@ ipcMain.on('clippy:quit', () => { quitting = true; app.quit(); });
 
 app.whenReady().then(() => {
   preferences = loadPreferences();
-  state.mode = preferences.mode;
+  state.mode = preferences.settings.startupMode === 'last' ? preferences.mode : preferences.settings.startupMode;
   codexThreadId = loadSavedThread();
   if (state.mode === 'chatgpt') {
     const chat = ensureActiveChatGptChat(chatGptHistoryPath());

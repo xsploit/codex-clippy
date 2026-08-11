@@ -1,11 +1,11 @@
 {
   "name": "codex-clippy",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "A desktop Clippy-style assistant powered by the Codex app server.",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.cjs && node --check src/app-server.cjs && node --check src/chat-history.cjs && node --check src/chatgpt-history.cjs && node --check src/chatgpt-page-client.cjs && node --check src/chatgpt-page-preload.cjs && node --check src/chatgpt-transport.cjs && node --check src/codex-desktop-transcriber.cjs && node --check src/realtime-transcriber.cjs && node --check src/whisper.cjs && node --check src/preload.cjs && node --check src/markdown-renderer.js && node --check src/clippy-svg.js && node --check src/renderer.js",
+    "check": "node --check src/main.cjs && node --check src/preferences.cjs && node --check src/app-server.cjs && node --check src/chat-history.cjs && node --check src/chatgpt-history.cjs && node --check src/chatgpt-page-client.cjs && node --check src/chatgpt-page-preload.cjs && node --check src/chatgpt-transport.cjs && node --check src/codex-desktop-transcriber.cjs && node --check src/realtime-transcriber.cjs && node --check src/whisper.cjs && node --check src/preload.cjs && node --check src/markdown-renderer.js && node --check src/clippy-svg.js && node --check src/renderer.js",
     "test": "node --test test/*.test.cjs",
     "dist": "electron-builder --win portable"
   },

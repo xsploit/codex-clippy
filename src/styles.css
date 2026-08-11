@@ -122,9 +122,9 @@ header {
 
 @keyframes pulse { 50% { opacity: .36; transform: scale(.8); } }
 
-.window-actions { display: flex; gap: 4px; }
+.window-actions { display: flex; gap: 3px; }
 .window-actions button {
-  width: 24px;
+  width: 22px;
   height: 22px;
   padding: 0;
   border: 1px solid rgba(52,50,15,.42);
@@ -138,6 +138,7 @@ header {
 .window-actions button:disabled { opacity: .42; cursor: wait; }
 
 .bubble:has(.chat-menu:not([hidden])) { height: 370px; }
+.bubble:has(.settings-menu:not([hidden])) { height: 438px; }
 
 .chat-menu {
   position: absolute;
@@ -235,6 +236,118 @@ header {
 }
 .chat-menu-new:hover { background: #57528f; }
 .chat-menu-new:disabled { opacity: .48; cursor: wait; }
+
+.settings-menu {
+  position: absolute;
+  z-index: 9;
+  inset: 51px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 357px;
+  padding: 11px;
+  border: 1px solid rgba(52, 50, 15, .48);
+  border-radius: 9px;
+  background: linear-gradient(150deg, rgba(255,255,216,.99), rgba(244,239,130,.99));
+  box-shadow: 0 5px 14px rgba(33, 31, 7, .17), inset 0 0 0 1px rgba(255,255,255,.5);
+}
+.settings-menu-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 2px 7px;
+}
+.settings-menu-heading > div { display: flex; flex-direction: column; }
+.settings-menu-heading strong { font-size: 11px; letter-spacing: .15em; }
+.settings-menu-heading span { margin-top: 2px; font-size: 9px; opacity: .58; }
+.settings-menu-heading button {
+  width: 25px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(52, 50, 15, .35);
+  border-radius: 5px;
+  background: rgba(255,255,255,.32);
+  cursor: pointer;
+}
+.settings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+.settings-scroll fieldset {
+  margin: 0 0 7px;
+  padding: 3px 8px 2px;
+  border: 1px solid rgba(52,50,15,.24);
+  border-radius: 7px;
+  background: rgba(255,255,255,.22);
+}
+.settings-scroll legend {
+  padding: 0 4px;
+  color: #4f4a78;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 39px;
+  padding: 5px 2px;
+  border-bottom: 1px solid rgba(52,50,15,.12);
+  cursor: pointer;
+}
+.setting-row:last-child { border-bottom: 0; }
+.setting-row > span { display: flex; flex-direction: column; min-width: 0; }
+.setting-row strong { font-size: 10px; }
+.setting-row small { margin-top: 2px; font-size: 8px; line-height: 1.2; opacity: .58; }
+.setting-row input[type="checkbox"] {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 17px;
+  margin: 0;
+  border: 1px solid rgba(52,50,15,.52);
+  border-radius: 10px;
+  background: rgba(52,50,15,.18);
+  cursor: pointer;
+}
+.setting-row input[type="checkbox"]::before {
+  content: "";
+  display: block;
+  width: 11px;
+  height: 11px;
+  margin: 2px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: transform .15s ease;
+}
+.setting-row input[type="checkbox"]:checked { background: var(--violet); }
+.setting-row input[type="checkbox"]:checked::before { transform: translateX(13px); }
+.setting-row input:disabled, .setting-row select:disabled { opacity: .45; cursor: not-allowed; }
+.setting-row select {
+  flex: 0 0 auto;
+  max-width: 94px;
+  padding: 3px 4px;
+  border: 1px solid rgba(52,50,15,.42);
+  border-radius: 5px;
+  background: rgba(255,255,255,.58);
+  color: var(--ink);
+  font-size: 9px;
+}
+.settings-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 3px 0;
+  font-size: 8px;
+  opacity: .58;
+}
+
+.animations-disabled .clippy-vector,
+.animations-disabled .clippy-vector * { animation: none !important; transition: none !important; }
 
 .transcript {
   position: relative;

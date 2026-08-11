@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('codexClippy', {
   getState: () => ipcRenderer.invoke('clippy:get-state'),
+  getSettings: () => ipcRenderer.invoke('clippy:get-settings'),
+  setSettings: (settings) => ipcRenderer.invoke('clippy:set-settings', settings),
   send: (payload) => ipcRenderer.invoke('clippy:send', payload),
   getComposerOptions: (mode) => ipcRenderer.invoke('clippy:get-composer-options', mode),
   setComposerSettings: (mode, settings) => ipcRenderer.invoke('clippy:set-composer-settings', mode, settings),

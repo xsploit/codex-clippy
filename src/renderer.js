@@ -20,6 +20,20 @@ const chatList = document.querySelector('#chat-list');
 const chatMenuNewButton = document.querySelector('#chat-menu-new');
 const closeChatMenuButton = document.querySelector('#close-chat-menu');
 const chatMenuSource = document.querySelector('#chat-menu-source');
+const settingsButton = document.querySelector('#settings');
+const settingsMenu = document.querySelector('#settings-menu');
+const closeSettingsButton = document.querySelector('#close-settings');
+const settingAlwaysOnTop = document.querySelector('#setting-always-on-top');
+const settingShowOnLaunch = document.querySelector('#setting-show-on-launch');
+const settingBubbleOpen = document.querySelector('#setting-bubble-open');
+const settingAnimations = document.querySelector('#setting-animations');
+const settingOpenAtLogin = document.querySelector('#setting-open-at-login');
+const settingStartupMode = document.querySelector('#setting-startup-mode');
+const settingSyncWebHistory = document.querySelector('#setting-sync-web-history');
+const settingWebHistoryLimit = document.querySelector('#setting-web-history-limit');
+const loginSettingDetail = document.querySelector('#login-setting-detail');
+const settingsVersion = document.querySelector('#settings-version');
+const settingsSaved = document.querySelector('#settings-saved');
 const modeButtons = [...document.querySelectorAll('#mode-switch [data-mode]')];
 const attachButton = document.querySelector('#attach');
 const attachmentList = document.querySelector('#attachment-list');
@@ -56,6 +70,9 @@ let loadingChats = false;
 let currentMode = 'chatgpt';
 let attachments = [];
 let composerOptions = null;
+let settingsState = null;
+let animationsEnabled = true;
+let settingsSaveTimer = null;
 
 function readyLabel() {
   return currentMode === 'chatgpt' ? 'ChatGPT ready' : 'Codex ready';
@@ -228,7 +245,7 @@ function setStatus(status) {
 }
 
 function safePlay(...names) {
-  if (!agent) return;
+  if (!agent || !animationsEnabled) return;
   const name = names.find((candidate) => agent.hasAnimation(candidate));
   if (name) agent.play(name, 4_500);
 }
@@ -243,6 +260,68 @@ function toggleBubble(show) {
   bubble.hidden = !show;
   openBubble.hidden = show;
   if (show) prompt.focus();
+}
+
+function applyClientSettings(settings) {
+  animationsEnabled = settings.animations !== false;
+  document.body.classList.toggle('animations-disabled', !animationsEnabled);
+  if (!animationsEnabled && agent) agent.play('RestPose', 0);
+}
+
+function renderSettings(settings) {
+  settingsState = settings;
+  settingAlwaysOnTop.checked = settings.alwaysOnTop;
+  settingShowOnLaunch.checked = settings.showOnLaunch;
+  settingBubbleOpen.checked = settings.bubbleOpenOnLaunch;
+  settingAnimations.checked = settings.animations;
+  settingOpenAtLogin.checked = settings.openAtLogin;
+  settingOpenAtLogin.disabled = !settings.loginSupported;
+  loginSettingDetail.textContent = settings.loginSupported
+    ? 'Launch Clippy after signing in'
+    : 'Available in the packaged Clippy app';
+  settingStartupMode.value = settings.startupMode;
+  settingSyncWebHistory.checked = settings.syncWebHistory;
+  settingWebHistoryLimit.value = String(settings.webHistoryLimit);
+  settingWebHistoryLimit.disabled = !settings.syncWebHistory;
+  settingsVersion.textContent = `Codex Clippy v${settings.version}`;
+  applyClientSettings(settings);
+}
+
+function settingsPatchFromForm() {
+  return {
+    alwaysOnTop: settingAlwaysOnTop.checked,
+    showOnLaunch: settingShowOnLaunch.checked,
+    bubbleOpenOnLaunch: settingBubbleOpen.checked,
+    animations: settingAnimations.checked,
+    openAtLogin: settingOpenAtLogin.checked,
+    startupMode: settingStartupMode.value,
+    syncWebHistory: settingSyncWebHistory.checked,
+    webHistoryLimit: Number(settingWebHistoryLimit.value),
+  };
+}
+
+async function saveSettings() {
+  window.clearTimeout(settingsSaveTimer);
+  settingsSaved.textContent = 'Saving…';
+  try {
+    renderSettings(await api.setSettings(settingsPatchFromForm()));
+    settingsSaved.textContent = 'Saved';
+    settingsSaveTimer = window.setTimeout(() => { settingsSaved.textContent = 'Ready'; }, 1_400);
+  } catch (error) {
+    settingsSaved.textContent = 'Could not save';
+    showError(error.message);
+  }
+}
+
+function toggleSettings(show) {
+  settingsMenu.hidden = !show;
+  settingsButton.setAttribute('aria-expanded', String(show));
+  if (show) {
+    toggleChatMenu(false);
+    settingsMenu.querySelector('input, select, button')?.focus();
+  } else {
+    prompt.focus();
+  }
 }
 
 function renderPersistedMessages(messages = []) {
@@ -330,7 +409,11 @@ async function refreshChatMenu() {
 function toggleChatMenu(show) {
   chatMenu.hidden = !show;
   historyButton.setAttribute('aria-expanded', String(show));
-  if (show) refreshChatMenu();
+  if (show) {
+    settingsMenu.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+    refreshChatMenu();
+  }
   else prompt.focus();
 }
 
@@ -890,6 +973,8 @@ api.onEvent((event) => {
   else if (event.type === 'notification') handleNotification(event.message);
   else if (event.type === 'server-request') renderRequest(event.request);
   else if (event.type === 'error') showError(event.message);
+  else if (event.type === 'settings') renderSettings(event.settings);
+  else if (event.type === 'open-settings') toggleSettings(true);
   else if (event.type === 'mode') {
     currentMode = event.mode;
     currentThreadId = event.chat?.id || null;
@@ -983,6 +1068,9 @@ document.querySelector('#stop').addEventListener('click', () => api.stop());
 micButton.addEventListener('click', () => recording ? stopDictation() : startDictation());
 historyButton.addEventListener('click', () => toggleChatMenu(chatMenu.hidden));
 closeChatMenuButton.addEventListener('click', () => toggleChatMenu(false));
+settingsButton.addEventListener('click', () => toggleSettings(settingsMenu.hidden));
+closeSettingsButton.addEventListener('click', () => toggleSettings(false));
+for (const control of settingsMenu.querySelectorAll('input, select')) control.addEventListener('change', saveSettings);
 headerNewChatButton.addEventListener('click', startNewChat);
 chatMenuNewButton.addEventListener('click', startNewChat);
 for (const button of modeButtons) button.addEventListener('click', () => switchMode(button.dataset.mode));
@@ -992,6 +1080,11 @@ document.querySelector('#hide').addEventListener('click', async () => {
   api.hide();
 });
 openBubble.addEventListener('click', () => toggleBubble(true));
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!settingsMenu.hidden) toggleSettings(false);
+  else if (!chatMenu.hidden) toggleChatMenu(false);
+});
 
 window.addEventListener('mousemove', (event) => {
   const interactive = Boolean(event.target.closest?.('.interactive'));
@@ -1002,6 +1095,8 @@ window.addEventListener('mousemove', (event) => {
   }
 });
 window.addEventListener('beforeunload', () => cleanupDictation(true));
+
+document.documentElement.dataset.clippyRendererReady = 'true';
 
 async function installCharacterDrag() {
   const el = agent._el;
@@ -1038,6 +1133,7 @@ async function installCharacterDrag() {
 }
 
 async function boot() {
+  renderSettings(await api.getSettings());
   const initial = await api.getState();
   currentMode = initial.mode || 'chatgpt';
   currentThreadId = initial.threadId || null;
@@ -1050,6 +1146,7 @@ async function boot() {
   agent.show(true);
   agent.moveTo(window.innerWidth - 224, window.innerHeight - 235);
   installCharacterDrag();
+  toggleBubble(settingsState.bubbleOpenOnLaunch !== false);
   safePlay('Wave', 'Greeting', 'GetAttention');
 }
 
