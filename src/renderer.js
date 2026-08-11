@@ -170,7 +170,7 @@ function renderMode() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   }
-  chatMenuSource.textContent = currentMode === 'chatgpt' ? 'Saved ChatGPT conversations' : 'Persisted by Codex';
+  chatMenuSource.textContent = currentMode === 'chatgpt' ? 'ChatGPT.com + Clippy conversations' : 'Persisted by Codex';
   prompt.placeholder = currentMode === 'chatgpt' ? 'Chat with Clippy…' : 'Tell Clippy what to do…';
   prompt.setAttribute('aria-label', currentMode === 'chatgpt' ? 'Message ChatGPT Clippy' : 'Message Codex Clippy');
   sendButton.textContent = currentMode === 'chatgpt' ? 'Ask' : 'Do it';
@@ -286,16 +286,25 @@ function renderChatList(chats) {
     row.setAttribute('role', 'listitem');
     row.dataset.threadId = chat.id;
 
+    const heading = document.createElement('span');
+    heading.className = 'chat-row-heading';
     const title = document.createElement('span');
     title.className = 'chat-row-title';
     title.textContent = chat.name;
+    heading.appendChild(title);
+    if (currentMode === 'chatgpt') {
+      const source = document.createElement('span');
+      source.className = `chat-row-source ${chat.source === 'web' ? 'web' : 'clippy'}`;
+      source.textContent = chat.source === 'web' ? 'WEB' : 'CLIPPY';
+      heading.appendChild(source);
+    }
     const preview = document.createElement('span');
     preview.className = 'chat-row-preview';
-    preview.textContent = chat.preview || 'New conversation';
+    preview.textContent = chat.preview || (chat.source === 'web' ? 'ChatGPT.com conversation' : 'New conversation');
     const time = document.createElement('span');
     time.className = 'chat-row-time';
     time.textContent = formatChatTime(chat.updatedAt);
-    row.append(title, preview, time);
+    row.append(heading, preview, time);
     row.addEventListener('click', () => switchChat(chat.id));
     chatList.appendChild(row);
   }

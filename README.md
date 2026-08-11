@@ -14,6 +14,7 @@ A tiny, always-on-top Windows assistant with a resolution-independent, dynamical
 - Live model picker in both modes, with Codex reasoning-effort controls
 - Codex access profiles for read-only, workspace, or full computer/filesystem access
 - File picker, drag-and-drop attachments, image previews, and direct clipboard image pasting
+- Existing ChatGPT.com sidebar conversations in Clippy's chat menu, with real history restoration and continuation
 - Separate persistent conversation lists for ChatGPT and Codex
 - Markdown rendering, microphone dictation, hosted GPT transcription, and local Whisper fallback
 - Idle, listening, thinking, searching, working, explaining, success, error, sleeping, and interaction animations
@@ -36,7 +37,7 @@ The compact controls below the composer come directly from each live backend. Ch
 
 Use **＋** to select one or more files, drop files anywhere on the composer, or paste an image directly from the clipboard. Codex receives images as native `localImage` inputs and other files as path-aware mentions. Chat mode uploads attachments through the signed-in ChatGPT file service and sends image asset pointers or document attachment metadata with the conversation.
 
-The ☰ button opens the separate chat list for the active mode, where earlier conversations can be restored and continued. New ChatGPT chats are materialized locally as soon as they are created, before the first user message.
+The ☰ button opens the separate chat list for the active mode, where earlier conversations can be restored and continued. In Chat mode it merges local Clippy chats with the signed-in account's current ChatGPT.com sidebar and labels their source as **CLIPPY** or **WEB**. Selecting a web chat loads its active message branch and continuation node, so the next message continues the original conversation rather than creating a copy. New ChatGPT chats are materialized locally as soon as they are created, before the first user message.
 
 Assistant responses render Markdown with styled headings, lists, links, tables, blockquotes, and fenced code. Raw HTML stays disabled, and web links open in the system browser instead of navigating the companion window.
 

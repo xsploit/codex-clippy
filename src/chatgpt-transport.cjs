@@ -55,6 +55,72 @@ function normalizeChatGptModels(catalog = {}) {
   return models;
 }
 
+function textFromWebMessage(message = {}) {
+  const parts = message.content?.parts || [];
+  return parts.map((part) => {
+    if (typeof part === 'string') return part;
+    if (part?.content_type === 'image_asset_pointer') return '[Image]';
+    if (part?.content_type === 'audio_asset_pointer') return '[Audio]';
+    return typeof part?.text === 'string' ? part.text : '';
+  }).filter(Boolean).join('\n').trim();
+}
+
+function webConversationMessages(conversation = {}) {
+  const mapping = conversation.mapping || {};
+  let nodeId = conversation.current_node || conversation.currentNode || null;
+  const path = [];
+  const visited = new Set();
+  while (nodeId && mapping[nodeId] && !visited.has(nodeId)) {
+    visited.add(nodeId);
+    path.push(mapping[nodeId]);
+    nodeId = mapping[nodeId].parent || null;
+  }
+  path.reverse();
+  const messages = [];
+  for (const node of path) {
+    const message = node.message;
+    const role = message?.author?.role;
+    if (role !== 'user' && role !== 'assistant') continue;
+    if (message.metadata?.is_visually_hidden_from_conversation) continue;
+    if (role === 'assistant' && message.channel && message.channel !== 'final') continue;
+    const text = textFromWebMessage(message);
+    if (text) messages.push({ role, text });
+  }
+  return messages;
+}
+
+function normalizeWebConversation(conversation = {}) {
+  const conversationId = conversation.id || conversation.conversation_id;
+  if (!conversationId) throw new Error('ChatGPT returned a conversation without an id.');
+  const messages = webConversationMessages(conversation);
+  const last = messages.at(-1)?.text || conversation.snippet || '';
+  return {
+    id: `web:${conversationId}`,
+    source: 'web',
+    conversationId,
+    parentMessageId: conversation.current_node || conversation.currentNode || null,
+    name: conversation.title || 'Untitled ChatGPT chat',
+    preview: String(last).trim().replace(/\s+/g, ' ').slice(0, 92),
+    createdAt: Number(conversation.create_time || 0),
+    updatedAt: Number(conversation.update_time || conversation.create_time || 0),
+    messages,
+  };
+}
+
+function normalizeWebConversationList(payload = {}) {
+  return (payload.items || []).filter((conversation) => conversation?.id && !conversation.is_archived)
+    .map((conversation) => ({
+      id: `web:${conversation.id}`,
+      source: 'web',
+      conversationId: conversation.id,
+      name: conversation.title || 'Untitled ChatGPT chat',
+      preview: String(conversation.snippet || '').trim().replace(/\s+/g, ' ').slice(0, 92),
+      createdAt: Number(conversation.create_time || 0),
+      updatedAt: Number(conversation.update_time || conversation.create_time || 0),
+      active: false,
+    }));
+}
+
 function buildConversationBody({
   text,
   conversationId = null,
@@ -188,6 +254,33 @@ class ChatGptTransport extends EventEmitter {
     return normalizeChatGptModels(catalog);
   }
 
+  async _fetchChatGptJson(route) {
+    if (!this.ready) await this.start();
+    const auth = await this.ensureAuthenticated();
+    return this.window.webContents.executeJavaScript(`fetch(${JSON.stringify(route)}, {
+      headers: {
+        authorization: ${JSON.stringify(`Bearer ${auth.token}`)},
+        'chatgpt-account-id': ${JSON.stringify(auth.accountId)},
+        'oai-language': navigator.language || 'en-US',
+        originator: 'codex_clippy'
+      }
+    }).then(async (response) => {
+      if (!response.ok) throw new Error('ChatGPT request failed (' + response.status + ').');
+      return response.json();
+    })`);
+  }
+
+  async listConversations(limit = 50) {
+    const boundedLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    const payload = await this._fetchChatGptJson(`/backend-api/conversations?offset=0&limit=${boundedLimit}&order=updated&is_archived=false`);
+    return normalizeWebConversationList(payload);
+  }
+
+  async getConversation(conversationId) {
+    const payload = await this._fetchChatGptJson(`/backend-api/conversation/${encodeURIComponent(conversationId)}`);
+    return normalizeWebConversation(payload);
+  }
+
   async uploadAttachments(attachments = []) {
     if (!attachments.length) return [];
     if (!this.ready) await this.start();
@@ -279,4 +372,12 @@ class ChatGptTransport extends EventEmitter {
   }
 }
 
-module.exports = { buildConversationBody, ChatGptTransport, normalizeChatGptModels, readCodexAuth };
+module.exports = {
+  buildConversationBody,
+  ChatGptTransport,
+  normalizeChatGptModels,
+  normalizeWebConversation,
+  normalizeWebConversationList,
+  readCodexAuth,
+  webConversationMessages,
+};

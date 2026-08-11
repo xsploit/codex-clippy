@@ -1,6 +1,6 @@
 {
   "name": "codex-clippy",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "A desktop Clippy-style assistant powered by the Codex app server.",
   "main": "src/main.cjs",
   "scripts": {

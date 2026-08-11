@@ -3,7 +3,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { buildConversationBody, normalizeChatGptModels, readCodexAuth } = require('../src/chatgpt-transport.cjs');
+const {
+  buildConversationBody,
+  normalizeChatGptModels,
+  normalizeWebConversation,
+  normalizeWebConversationList,
+  readCodexAuth,
+} = require('../src/chatgpt-transport.cjs');
 
 function jwt(payload) {
   return `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.signature`;
@@ -60,4 +66,31 @@ test('builds a ChatGPT image-and-file request with a selected model', () => {
   assert.equal(body.messages[0].content.content_type, 'multimodal_text');
   assert.equal(body.messages[0].content.parts[1].asset_pointer, 'file-service://file-image');
   assert.equal(body.messages[0].metadata.attachments[0].id, 'file-notes');
+});
+
+test('normalizes ChatGPT.com history summaries', () => {
+  const chats = normalizeWebConversationList({ items: [
+    { id: 'conversation-1', title: 'Web chat', snippet: 'A useful answer', create_time: 10, update_time: 20 },
+    { id: 'archived', title: 'Old', is_archived: true },
+  ] });
+  assert.deepEqual(chats, [{
+    id: 'web:conversation-1', source: 'web', conversationId: 'conversation-1', name: 'Web chat',
+    preview: 'A useful answer', createdAt: 10, updatedAt: 20, active: false,
+  }]);
+});
+
+test('restores the active branch of a ChatGPT.com conversation', () => {
+  const chat = normalizeWebConversation({
+    id: 'conversation-1', title: 'Web chat', current_node: 'assistant-1', create_time: 10, update_time: 20,
+    mapping: {
+      root: { id: 'root', parent: null, message: null },
+      user: { id: 'user', parent: 'root', message: { author: { role: 'user' }, content: { parts: ['Hello'] } } },
+      assistant: { id: 'assistant', parent: 'user', message: { author: { role: 'assistant' }, content: { parts: ['Wrong branch'] } } },
+      'assistant-1': { id: 'assistant-1', parent: 'user', message: { author: { role: 'assistant' }, content: { parts: ['Hey there'] } } },
+    },
+  });
+  assert.equal(chat.id, 'web:conversation-1');
+  assert.equal(chat.parentMessageId, 'assistant-1');
+  assert.deepEqual(chat.messages, [{ role: 'user', text: 'Hello' }, { role: 'assistant', text: 'Hey there' }]);
+  assert.equal(chat.preview, 'Hey there');
 });

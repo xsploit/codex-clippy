@@ -88,6 +88,26 @@ function appendMessage(filePath, chatId, message, fsImpl = fs, now = () => Date.
   }, fsImpl, now);
 }
 
+function upsertExternalChat(filePath, incoming, fsImpl = fs) {
+  if (!incoming?.conversationId) throw new Error('Cannot save a ChatGPT web chat without a conversation id.');
+  const state = readState(filePath, fsImpl);
+  const existing = state.chats.find((chat) => chat.id === incoming.id || chat.conversationId === incoming.conversationId);
+  const id = existing?.id || incoming.id || `web:${incoming.conversationId}`;
+  const chat = {
+    ...(existing || {}),
+    ...incoming,
+    id,
+    source: 'web',
+    conversationId: incoming.conversationId,
+    messages: Array.isArray(incoming.messages) ? incoming.messages : (existing?.messages || []),
+  };
+  writeState(filePath, {
+    activeId: id,
+    chats: [chat, ...state.chats.filter((candidate) => candidate.id !== id && candidate.conversationId !== chat.conversationId)].slice(0, MAX_CHATS),
+  }, fsImpl);
+  return chat;
+}
+
 function chatSummary(chat, activeId) {
   return {
     id: chat.id,
@@ -96,6 +116,8 @@ function chatSummary(chat, activeId) {
     createdAt: chat.createdAt || 0,
     updatedAt: chat.updatedAt || chat.createdAt || 0,
     active: chat.id === activeId,
+    source: chat.source || 'clippy',
+    conversationId: chat.conversationId || null,
   };
 }
 
@@ -108,5 +130,6 @@ module.exports = {
   getChat,
   readState,
   setActiveChat,
+  upsertExternalChat,
   updateChat,
 };

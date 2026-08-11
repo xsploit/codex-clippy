@@ -195,8 +195,20 @@ header {
 }
 .chat-row:hover { background: rgba(255,255,255,.66); }
 .chat-row.active { border-color: var(--violet); background: rgba(101,95,153,.13); }
+.chat-row-heading { display: flex; align-items: center; min-width: 0; gap: 5px; }
 .chat-row-title, .chat-row-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-row-title { font-size: 11px; font-weight: 700; }
+.chat-row-title { min-width: 0; font-size: 11px; font-weight: 700; }
+.chat-row-source {
+  flex: 0 0 auto;
+  padding: 1px 3px;
+  border: 1px solid rgba(52,50,15,.28);
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  opacity: .65;
+}
+.chat-row-source.web { border-color: rgba(101,95,153,.5); color: #47417e; }
 .chat-row-preview { margin-top: 3px; font-size: 9px; opacity: .62; }
 .chat-row-time { position: absolute; top: 9px; right: 9px; font-size: 8px; opacity: .5; }
 .chat-row.active::after {

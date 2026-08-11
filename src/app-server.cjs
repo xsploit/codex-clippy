@@ -86,7 +86,7 @@ class CodexAppServer extends EventEmitter {
       clientInfo: {
         name: 'codex_clippy',
         title: 'Codex Clippy',
-        version: '0.9.0',
+        version: '0.9.1',
       },
       capabilities: { experimentalApi: true },
     });

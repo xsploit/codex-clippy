@@ -12,6 +12,7 @@ const {
   getChat: getChatGptChat,
   readState: readChatGptState,
   setActiveChat: setActiveChatGptChat,
+  upsertExternalChat: upsertExternalChatGptChat,
   updateChat: updateChatGptChat,
 } = require('./chatgpt-history.cjs');
 const { ChatGptTransport } = require('./chatgpt-transport.cjs');
@@ -180,11 +181,32 @@ function chatGptPayload(chat) {
   };
 }
 
+async function openChatGptChat(chatId) {
+  if (String(chatId).startsWith('web:')) {
+    const conversationId = String(chatId).slice(4);
+    const remote = await chatgpt.getConversation(conversationId);
+    return upsertExternalChatGptChat(chatGptHistoryPath(), remote);
+  }
+  return setActiveChatGptChat(chatGptHistoryPath(), chatId);
+}
+
 async function listClippyChats() {
   if (state.mode === 'chatgpt') {
     const stored = readChatGptState(chatGptHistoryPath());
-    return stored.chats
-      .map((chat) => chatGptSummary(chat, stored.activeId))
+    const local = stored.chats.map((chat) => chatGptSummary(chat, stored.activeId));
+    let remote = [];
+    try {
+      remote = await chatgpt.listConversations(50);
+    } catch (error) {
+      console.log(`[chatgpt] Web history unavailable: ${error.message}`);
+    }
+    const localByConversation = new Map(local.filter((chat) => chat.conversationId).map((chat) => [chat.conversationId, chat]));
+    const mergedRemote = remote.map((chat) => {
+      const existing = localByConversation.get(chat.conversationId);
+      return existing ? { ...chat, ...existing } : chat;
+    });
+    const remoteConversationIds = new Set(remote.map((chat) => chat.conversationId));
+    return [...local.filter((chat) => !chat.conversationId || !remoteConversationIds.has(chat.conversationId)), ...mergedRemote]
       .sort((left, right) => right.updatedAt - left.updatedAt);
   }
   if (!bridge?.ready) return [];
@@ -341,6 +363,17 @@ function createWindow() {
             })()`);
             if (composerReady) break;
             await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          if (process.env.CODEX_CLIPPY_DEMO_OPEN_HISTORY === '1') {
+            await mainWindow.webContents.executeJavaScript(`document.querySelector('#chat-history')?.click()`);
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              const webHistoryReady = await mainWindow.webContents.executeJavaScript(`(() => {
+                const rows = [...document.querySelectorAll('.chat-row')];
+                return rows.length > 1 && rows.some((row) => row.querySelector('.chat-row-source.web'));
+              })()`);
+              if (webHistoryReady) break;
+              await new Promise((resolve) => setTimeout(resolve, 500));
+            }
           }
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(capturePath, image.toPNG());
@@ -604,14 +637,17 @@ ipcMain.handle('clippy:transcription-cancel', () => getRealtimeTranscriber().can
 ipcMain.handle('clippy:new-chat', () => newChat());
 ipcMain.handle('clippy:list-chats', () => listClippyChats());
 ipcMain.handle('clippy:get-chat', async (_event, threadId) => {
-  if (state.mode === 'chatgpt') return chatGptPayload(getChatGptChat(chatGptHistoryPath(), threadId));
+  if (state.mode === 'chatgpt') {
+    if (String(threadId).startsWith('web:')) return chatGptPayload(await openChatGptChat(threadId));
+    return chatGptPayload(getChatGptChat(chatGptHistoryPath(), threadId));
+  }
   ensureRememberedThread(threadId);
   return chatPayload(await bridge.readThread(threadId, true));
 });
 ipcMain.handle('clippy:switch-chat', async (_event, threadId) => {
   if (state.busy) throw new Error('Let Clippy finish the current turn first.');
   if (state.mode === 'chatgpt') {
-    const chat = setActiveChatGptChat(chatGptHistoryPath(), threadId);
+    const chat = await openChatGptChat(threadId);
     state.threadId = chat.id;
     return chatGptPayload(chat);
   }
