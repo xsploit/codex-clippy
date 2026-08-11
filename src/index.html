@@ -53,8 +53,24 @@
 
         <form id="composer">
           <textarea id="prompt" rows="2" placeholder="Tell Clippy what to do…" aria-label="Message Codex Clippy"></textarea>
+          <div id="attachment-list" class="attachment-list" aria-label="Attached files" hidden></div>
+          <div class="composer-options">
+            <button id="attach" class="attach-button" type="button" title="Attach files or images" aria-label="Attach files">＋</button>
+            <label class="composer-select model-select-wrap" title="Model">
+              <span>MODEL</span>
+              <select id="model-select" aria-label="Model"><option>Loading…</option></select>
+            </label>
+            <label id="effort-wrap" class="composer-select" title="Reasoning effort" hidden>
+              <span>THINK</span>
+              <select id="effort-select" aria-label="Reasoning effort"></select>
+            </label>
+            <label id="permission-wrap" class="composer-select permission-select-wrap" title="Codex file and computer access" hidden>
+              <span>ACCESS</span>
+              <select id="permission-select" aria-label="Codex permissions"></select>
+            </label>
+          </div>
           <div class="composer-footer">
-            <span>Ctrl + Enter to send</span>
+            <span>Paste images · Ctrl + Enter</span>
             <div>
               <button id="mic" class="mic-button secondary" type="button" title="Dictate with local Whisper" aria-label="Start dictation" aria-pressed="false">🎙 Speak</button>
               <button id="stop" class="secondary" type="button" hidden>Stop</button>

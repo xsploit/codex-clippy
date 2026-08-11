@@ -21,6 +21,13 @@ const chatMenuNewButton = document.querySelector('#chat-menu-new');
 const closeChatMenuButton = document.querySelector('#close-chat-menu');
 const chatMenuSource = document.querySelector('#chat-menu-source');
 const modeButtons = [...document.querySelectorAll('#mode-switch [data-mode]')];
+const attachButton = document.querySelector('#attach');
+const attachmentList = document.querySelector('#attachment-list');
+const modelSelect = document.querySelector('#model-select');
+const effortSelect = document.querySelector('#effort-select');
+const effortWrap = document.querySelector('#effort-wrap');
+const permissionSelect = document.querySelector('#permission-select');
+const permissionWrap = document.querySelector('#permission-wrap');
 
 let agent;
 let busy = false;
@@ -47,6 +54,8 @@ let dictationPrefix = '';
 let currentThreadId = null;
 let loadingChats = false;
 let currentMode = 'chatgpt';
+let attachments = [];
+let composerOptions = null;
 
 function readyLabel() {
   return currentMode === 'chatgpt' ? 'ChatGPT ready' : 'Codex ready';
@@ -54,6 +63,105 @@ function readyLabel() {
 
 function workingLabel() {
   return currentMode === 'chatgpt' ? 'ChatGPT is thinking…' : 'Codex is working…';
+}
+
+function canSend() {
+  return !busy && !recording && !finishingTranscript && Boolean(prompt.value.trim() || attachments.length);
+}
+
+function updateComposerEnabled() {
+  sendButton.disabled = !canSend();
+  attachButton.disabled = busy || recording || finishingTranscript;
+  modelSelect.disabled = busy || recording || finishingTranscript;
+  effortSelect.disabled = busy || recording || finishingTranscript;
+  permissionSelect.disabled = busy || recording || finishingTranscript;
+}
+
+function fillSelect(select, options, selected) {
+  select.replaceChildren();
+  for (const option of options) {
+    const node = document.createElement('option');
+    node.value = option.id;
+    node.textContent = option.label || option.id;
+    node.title = option.description || '';
+    node.disabled = option.allowed === false;
+    node.selected = option.id === selected;
+    select.appendChild(node);
+  }
+}
+
+function renderEfforts(selectedEffort = composerOptions?.selectedEffort) {
+  const model = composerOptions?.models?.find((option) => option.id === modelSelect.value);
+  const efforts = currentMode === 'codex' ? (model?.efforts || []) : [];
+  effortWrap.hidden = !efforts.length;
+  fillSelect(effortSelect, efforts, selectedEffort || model?.defaultEffort);
+}
+
+async function refreshComposerOptions() {
+  modelSelect.replaceChildren(new Option('Loading…', ''));
+  modelSelect.disabled = true;
+  try {
+    composerOptions = await api.getComposerOptions(currentMode);
+    fillSelect(modelSelect, composerOptions.models || [], composerOptions.selectedModel);
+    renderEfforts(composerOptions.selectedEffort);
+    permissionWrap.hidden = currentMode !== 'codex';
+    fillSelect(permissionSelect, composerOptions.permissions || [], composerOptions.selectedPermissions);
+  } catch (error) {
+    modelSelect.replaceChildren(new Option('Auto', 'auto'));
+    effortWrap.hidden = true;
+    permissionWrap.hidden = currentMode !== 'codex';
+    console.warn(`Composer options unavailable: ${error.message}`);
+  }
+  updateComposerEnabled();
+}
+
+async function saveComposerSettings() {
+  try {
+    composerOptions = await api.setComposerSettings(currentMode, {
+      model: modelSelect.value,
+      effort: currentMode === 'codex' ? (effortSelect.value || null) : null,
+      permissions: currentMode === 'codex' ? permissionSelect.value : null,
+    });
+    fillSelect(modelSelect, composerOptions.models || [], composerOptions.selectedModel);
+    renderEfforts(composerOptions.selectedEffort);
+    if (currentMode === 'codex') fillSelect(permissionSelect, composerOptions.permissions || [], composerOptions.selectedPermissions);
+  } catch (error) {
+    showError(error.message);
+  }
+  updateComposerEnabled();
+}
+
+function renderAttachments() {
+  attachmentList.replaceChildren();
+  attachmentList.hidden = !attachments.length;
+  for (const attachment of attachments) {
+    const chip = document.createElement('div');
+    chip.className = 'attachment-chip';
+    if (attachment.preview) {
+      const preview = document.createElement('img');
+      preview.src = attachment.preview;
+      preview.alt = '';
+      chip.appendChild(preview);
+    } else {
+      const icon = document.createElement('span');
+      icon.textContent = '📎';
+      chip.appendChild(icon);
+    }
+    const name = document.createElement('span');
+    name.textContent = attachment.name;
+    name.title = attachment.path;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${attachment.name}`);
+    remove.addEventListener('click', () => {
+      attachments = attachments.filter((item) => item.id !== attachment.id);
+      renderAttachments();
+    });
+    chip.append(name, remove);
+    attachmentList.appendChild(chip);
+  }
+  updateComposerEnabled();
 }
 
 function renderMode() {
@@ -67,6 +175,7 @@ function renderMode() {
   prompt.setAttribute('aria-label', currentMode === 'chatgpt' ? 'Message ChatGPT Clippy' : 'Message Codex Clippy');
   sendButton.textContent = currentMode === 'chatgpt' ? 'Ask' : 'Do it';
   requestPanel.hidden = currentMode !== 'codex' || !activeRequest;
+  permissionWrap.hidden = currentMode !== 'codex';
 }
 
 function appendMessage(className, text) {
@@ -85,7 +194,6 @@ function setMessageContent(node, text) {
 
 function setBusy(next) {
   busy = next;
-  sendButton.disabled = next || recording || finishingTranscript;
   micButton.disabled = next || finishingTranscript;
   historyButton.disabled = next || recording || finishingTranscript;
   headerNewChatButton.disabled = next || recording || finishingTranscript;
@@ -94,6 +202,7 @@ function setBusy(next) {
   stopButton.hidden = !next;
   statusDot.className = `status-dot ${next ? 'busy' : 'ready'}`;
   if (next) statusLabel.textContent = workingLabel();
+  updateComposerEnabled();
 }
 
 function setRecording(next) {
@@ -102,7 +211,6 @@ function setRecording(next) {
   micButton.setAttribute('aria-pressed', String(next));
   micButton.setAttribute('aria-label', next ? 'Stop dictation' : 'Start dictation');
   micButton.textContent = next ? '■ Stop mic' : '🎙 Speak';
-  sendButton.disabled = busy || next || finishingTranscript;
   historyButton.disabled = busy || next || finishingTranscript;
   headerNewChatButton.disabled = busy || next || finishingTranscript;
   chatMenuNewButton.disabled = busy || next || finishingTranscript;
@@ -111,6 +219,7 @@ function setRecording(next) {
     statusDot.className = 'status-dot busy';
     statusLabel.textContent = 'Listening…';
   }
+  updateComposerEnabled();
 }
 
 function setStatus(status) {
@@ -256,18 +365,25 @@ async function startNewChat() {
 
 async function submitPrompt() {
   const text = prompt.value.trim();
-  if (!text || busy || recording || finishingTranscript) return;
-  appendMessage('user-message', text);
+  if ((!text && !attachments.length) || busy || recording || finishingTranscript) return;
+  const submittedAttachments = attachments;
+  const visibleText = [text, ...submittedAttachments.map((attachment) => `📎 ${attachment.name}`)].filter(Boolean).join('\n');
+  appendMessage('user-message', visibleText);
   prompt.value = '';
+  attachments = [];
+  renderAttachments();
   responseNode = appendMessage('assistant-message', '');
   responseText = '';
   setBusy(true);
   safePlay('Thinking', 'Processing', 'Searching');
   try {
-    await api.send(text);
+    await api.send({ text, attachments: submittedAttachments });
   } catch (error) {
     responseNode?.remove();
     responseNode = null;
+    prompt.value = text;
+    attachments = submittedAttachments;
+    renderAttachments();
     showError(error.message);
   }
 }
@@ -480,7 +596,7 @@ function cleanupDictation(discardRecording = false) {
   micButton.setAttribute('aria-label', 'Start dictation');
   micButton.textContent = '🎙 Speak';
   micButton.disabled = busy;
-  sendButton.disabled = busy || !prompt.value.trim();
+  updateComposerEnabled();
   historyButton.disabled = busy;
   headerNewChatButton.disabled = busy;
   chatMenuNewButton.disabled = busy;
@@ -750,6 +866,7 @@ async function switchMode(mode) {
     requestPanel.hidden = true;
     requestPanel.replaceChildren();
     renderMode();
+    await refreshComposerOptions();
     renderPersistedMessages(payload.messages || []);
     toggleChatMenu(false);
     setStatus(payload.status || { state: 'ready', label: readyLabel() });
@@ -769,6 +886,7 @@ api.onEvent((event) => {
     currentThreadId = event.chat?.id || null;
     activeRequest = null;
     renderMode();
+    refreshComposerOptions();
     renderPersistedMessages(event.messages || []);
     toggleChatMenu(false);
     setStatus(event.status || { state: 'ready', label: readyLabel() });
@@ -805,6 +923,53 @@ prompt.addEventListener('keydown', (event) => {
     submitPrompt();
   }
 });
+prompt.addEventListener('input', updateComposerEnabled);
+prompt.addEventListener('paste', async (event) => {
+  const files = [...(event.clipboardData?.files || [])];
+  if (!files.length) return;
+  event.preventDefault();
+  try {
+    for (const file of files.slice(0, Math.max(0, 10 - attachments.length))) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      attachments.push(await api.savePastedFile({ name: file.name || 'pasted-image.png', mimeType: file.type, bytes }));
+    }
+    renderAttachments();
+  } catch (error) {
+    showError(error.message);
+  }
+});
+form.addEventListener('dragover', (event) => {
+  if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
+});
+form.addEventListener('drop', async (event) => {
+  const files = [...(event.dataTransfer?.files || [])];
+  if (!files.length) return;
+  event.preventDefault();
+  try {
+    for (const file of files.slice(0, Math.max(0, 10 - attachments.length))) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      attachments.push(await api.savePastedFile({ name: file.name, mimeType: file.type, bytes }));
+    }
+    renderAttachments();
+  } catch (error) {
+    showError(error.message);
+  }
+});
+attachButton.addEventListener('click', async () => {
+  try {
+    const picked = await api.pickFiles();
+    attachments.push(...picked.slice(0, Math.max(0, 10 - attachments.length)));
+    renderAttachments();
+  } catch (error) {
+    showError(error.message);
+  }
+});
+modelSelect.addEventListener('change', async () => {
+  renderEfforts();
+  await saveComposerSettings();
+});
+effortSelect.addEventListener('change', saveComposerSettings);
+permissionSelect.addEventListener('change', saveComposerSettings);
 document.querySelector('#stop').addEventListener('click', () => api.stop());
 micButton.addEventListener('click', () => recording ? stopDictation() : startDictation());
 historyButton.addEventListener('click', () => toggleChatMenu(chatMenu.hidden));
@@ -868,6 +1033,7 @@ async function boot() {
   currentMode = initial.mode || 'chatgpt';
   currentThreadId = initial.threadId || null;
   renderMode();
+  await refreshComposerOptions();
   setStatus(initial.status);
   setBusy(initial.busy);
   if (currentThreadId) await loadChat(currentThreadId);

@@ -26,6 +26,30 @@ class CodexAppServer extends EventEmitter {
     this.turnId = null;
     this.ready = false;
     this.stopping = false;
+    this.composer = {
+      model: null,
+      effort: null,
+      permissions: ':workspace',
+    };
+  }
+
+  configureComposer(options = {}) {
+    this.composer = {
+      ...this.composer,
+      model: options.model || null,
+      effort: options.effort || null,
+      permissions: options.permissions || ':workspace',
+    };
+  }
+
+  _threadOptions() {
+    return {
+      cwd: this.cwd,
+      approvalPolicy: 'on-request',
+      permissions: this.composer.permissions,
+      personality: 'friendly',
+      ...(this.composer.model ? { model: this.composer.model } : {}),
+    };
   }
 
   async start(resumeThreadId = null) {
@@ -62,7 +86,7 @@ class CodexAppServer extends EventEmitter {
       clientInfo: {
         name: 'codex_clippy',
         title: 'Codex Clippy',
-        version: '0.5.0',
+        version: '0.9.0',
       },
       capabilities: { experimentalApi: true },
     });
@@ -73,10 +97,7 @@ class CodexAppServer extends EventEmitter {
       try {
         const resumed = await this.request('thread/resume', {
           threadId: resumeThreadId,
-          cwd: this.cwd,
-          approvalPolicy: 'on-request',
-          sandbox: 'workspace-write',
-          personality: 'friendly',
+          ...this._threadOptions(),
         });
         thread = resumed.thread;
       } catch (error) {
@@ -95,10 +116,7 @@ class CodexAppServer extends EventEmitter {
 
   async _startThread() {
     const result = await this.request('thread/start', {
-      cwd: this.cwd,
-      approvalPolicy: 'on-request',
-      sandbox: 'workspace-write',
-      personality: 'friendly',
+      ...this._threadOptions(),
       developerInstructions: [
         'You are speaking through a tiny desktop assistant called Codex Clippy.',
         'Be concise, useful, a little cheeky, and always truthful about actions you took.',
@@ -128,10 +146,7 @@ class CodexAppServer extends EventEmitter {
     const previousThreadId = this.threadId;
     const result = await this.request('thread/resume', {
       threadId,
-      cwd: this.cwd,
-      approvalPolicy: 'on-request',
-      sandbox: 'workspace-write',
-      personality: 'friendly',
+      ...this._threadOptions(),
     });
     this.threadId = result.thread.id;
     this.threadName = result.thread.name || null;
@@ -165,6 +180,16 @@ class CodexAppServer extends EventEmitter {
     }
   }
 
+  async listModels(limit = 100) {
+    const result = await this.request('model/list', { limit, includeHidden: false });
+    return result.data || [];
+  }
+
+  async listPermissionProfiles(limit = 100) {
+    const result = await this.request('permissionProfile/list', { limit });
+    return result.data || [];
+  }
+
   async _unsubscribe(threadId) {
     try {
       await this.request('thread/unsubscribe', { threadId });
@@ -173,10 +198,14 @@ class CodexAppServer extends EventEmitter {
     }
   }
 
-  async sendPrompt(text) {
+  async sendPrompt(prompt, options = {}) {
     if (!this.ready || !this.threadId) throw new Error('Codex is not ready yet.');
+    const payload = typeof prompt === 'string' ? { text: prompt, attachments: [] } : (prompt || {});
+    const text = String(payload.text || '').trim();
+    const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+    if (!text && !attachments.length) throw new Error('Give Clippy something to do first.');
     if (!this.threadName) {
-      const name = titleFromPrompt(text);
+      const name = titleFromPrompt(text || attachments[0]?.name || 'Attached file');
       try {
         await this.request('thread/name/set', { threadId: this.threadId, name });
         this.threadName = name;
@@ -184,9 +213,23 @@ class CodexAppServer extends EventEmitter {
         this.emit('log', `Could not name chat: ${error.message}`);
       }
     }
+    const input = [];
+    if (text) input.push({ type: 'text', text, text_elements: [] });
+    for (const attachment of attachments) {
+      if (!attachment?.path) continue;
+      if (attachment.kind === 'image') {
+        input.push({ type: 'localImage', path: attachment.path, detail: 'auto' });
+      } else {
+        input.push({ type: 'mention', name: attachment.name || attachment.path, path: attachment.path });
+      }
+    }
+    const selected = { ...this.composer, ...options };
     const result = await this.request('turn/start', {
       threadId: this.threadId,
-      input: [{ type: 'text', text, text_elements: [] }],
+      input,
+      model: selected.model || null,
+      effort: selected.effort || null,
+      permissions: selected.permissions || ':workspace',
     }, 60_000);
     this.turnId = result.turn.id;
     return result.turn;

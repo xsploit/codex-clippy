@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, session, shell: electronShell, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell: electronShell, Tray } = require('electron');
+const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { CodexAppServer } = require('./app-server.cjs');
@@ -19,7 +20,7 @@ const { OpenAIRealtimeTranscriber } = require('./realtime-transcriber.cjs');
 const { WhisperTranscriber } = require('./whisper.cjs');
 
 const WINDOW_WIDTH = 620;
-const WINDOW_HEIGHT = 500;
+const WINDOW_HEIGHT = 560;
 
 if (process.env.CODEX_CLIPPY_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.CODEX_CLIPPY_USER_DATA_DIR));
@@ -45,6 +46,13 @@ let codexStatus = { state: 'starting', label: 'Starting Codex…' };
 let chatGptStatus = { state: 'starting', label: 'Connecting ChatGPT…' };
 let activeChatGptChatId = null;
 const liveRequests = new Map();
+let preferences;
+
+const DEFAULT_PREFERENCES = {
+  mode: 'chatgpt',
+  chatgpt: { selection: 'auto', model: 'auto', effort: null },
+  codex: { model: null, effort: null, permissions: ':workspace' },
+};
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'clippy-state.json');
@@ -58,18 +66,88 @@ function preferencesPath() {
   return path.join(app.getPath('userData'), 'clippy-preferences.json');
 }
 
-function loadMode() {
+function loadPreferences() {
   try {
     const parsed = JSON.parse(fs.readFileSync(preferencesPath(), 'utf8'));
-    return parsed.mode === 'codex' ? 'codex' : 'chatgpt';
+    return {
+      mode: parsed.mode === 'codex' ? 'codex' : 'chatgpt',
+      chatgpt: { ...DEFAULT_PREFERENCES.chatgpt, ...(parsed.chatgpt || {}) },
+      codex: { ...DEFAULT_PREFERENCES.codex, ...(parsed.codex || {}) },
+    };
   } catch {
-    return 'chatgpt';
+    return structuredClone(DEFAULT_PREFERENCES);
   }
 }
 
-function saveMode(mode) {
+function savePreferences() {
   fs.mkdirSync(path.dirname(preferencesPath()), { recursive: true });
-  fs.writeFileSync(preferencesPath(), JSON.stringify({ mode }, null, 2));
+  fs.writeFileSync(preferencesPath(), JSON.stringify(preferences, null, 2));
+}
+
+function attachmentMimeType(filePath, provided = '') {
+  if (provided) return provided;
+  const types = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json',
+    '.js': 'text/javascript', '.cjs': 'text/javascript', '.mjs': 'text/javascript', '.ts': 'text/typescript', '.tsx': 'text/typescript',
+    '.html': 'text/html', '.css': 'text/css', '.csv': 'text/csv', '.xml': 'application/xml', '.zip': 'application/zip',
+  };
+  return types[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+}
+
+function attachmentDescriptor(filePath, providedMimeType = '') {
+  const stat = fs.statSync(filePath);
+  const mimeType = attachmentMimeType(filePath, providedMimeType);
+  const kind = mimeType.startsWith('image/') ? 'image' : 'file';
+  const descriptor = { id: randomUUID(), path: filePath, name: path.basename(filePath), size: stat.size, mimeType, kind };
+  if (kind === 'image') {
+    const image = nativeImage.createFromPath(filePath);
+    const size = image.getSize();
+    descriptor.width = size.width;
+    descriptor.height = size.height;
+    if (stat.size <= 8 * 1024 * 1024) descriptor.preview = image.toDataURL();
+  }
+  return descriptor;
+}
+
+async function getComposerOptions(mode = state.mode) {
+  if (mode === 'chatgpt') {
+    let models = [{ id: 'auto', model: 'auto', effort: null, label: 'Auto' }];
+    try { models = await chatgpt.listModels(); } catch (error) { console.log(`[chatgpt] Model list unavailable: ${error.message}`); }
+    if (!models.some((model) => model.id === preferences.chatgpt.selection)) preferences.chatgpt = { ...DEFAULT_PREFERENCES.chatgpt };
+    return { mode, models, selectedModel: preferences.chatgpt.selection, selectedEffort: null, permissions: [], selectedPermissions: null };
+  }
+  let rawModels = [];
+  let rawPermissions = [];
+  for (let attempt = 0; attempt < 60 && bridge && !bridge.ready; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (bridge?.ready) {
+    [rawModels, rawPermissions] = await Promise.all([bridge.listModels(), bridge.listPermissionProfiles()]);
+  }
+  const models = rawModels.filter((model) => !model.hidden).map((model) => ({
+    id: model.model,
+    label: model.displayName,
+    description: model.description,
+    isDefault: model.isDefault,
+    defaultEffort: model.defaultReasoningEffort,
+    modalities: model.inputModalities || ['text', 'image'],
+    efforts: (model.supportedReasoningEfforts || []).map((option) => ({ id: option.reasoningEffort, label: option.reasoningEffort, description: option.description })),
+  }));
+  const selected = models.find((model) => model.id === preferences.codex.model) || models.find((model) => model.isDefault) || models[0];
+  const selectedEffort = selected?.efforts?.some((effort) => effort.id === preferences.codex.effort)
+    ? preferences.codex.effort
+    : selected?.defaultEffort || selected?.efforts?.[0]?.id || null;
+  const permissions = rawPermissions.map((profile) => ({
+    id: profile.id,
+    label: profile.id === ':read-only' ? 'Read only' : profile.id === ':danger-full-access' ? 'Full access' : 'Workspace',
+    description: profile.description,
+    allowed: profile.allowed,
+  }));
+  return {
+    mode, models, selectedModel: selected?.id || null, selectedEffort,
+    permissions, selectedPermissions: preferences.codex.permissions,
+  };
 }
 
 function loadSavedThread() {
@@ -256,6 +334,14 @@ function createWindow() {
               if (!state.busy && reply) break;
             }
           }
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            const composerReady = await mainWindow.webContents.executeJavaScript(`(() => {
+              const model = document.querySelector('#model-select');
+              return model && !model.disabled && model.value && model.options[0]?.textContent !== 'Loading…';
+            })()`);
+            if (composerReady) break;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(capturePath, image.toPNG());
           console.log(`[capture] ${capturePath}`);
@@ -300,6 +386,7 @@ function createTray() {
 
 async function startBridge() {
   bridge = new CodexAppServer({ cwd: process.env.CODEX_CLIPPY_CWD || process.cwd() });
+  bridge.configureComposer(preferences.codex);
   bridge.on('status', (status) => {
     codexStatus = status;
     if (state.mode === 'codex') {
@@ -399,7 +486,8 @@ async function setMode(mode, notify = true) {
   if (mode !== 'chatgpt' && mode !== 'codex') throw new Error('Unknown Clippy mode.');
   if (state.busy) throw new Error('Let Clippy finish the current turn first.');
   state.mode = mode;
-  saveMode(mode);
+  preferences.mode = mode;
+  savePreferences();
   let payload;
   if (mode === 'chatgpt') {
     const chat = ensureActiveChatGptChat(chatGptHistoryPath());
@@ -420,21 +508,67 @@ async function setMode(mode, notify = true) {
 }
 
 ipcMain.handle('clippy:get-state', () => state);
-ipcMain.handle('clippy:send', async (_event, text) => {
-  const clean = typeof text === 'string' ? text.trim() : '';
-  if (!clean) throw new Error('Give Clippy something to do first.');
+ipcMain.handle('clippy:get-composer-options', (_event, mode) => getComposerOptions(mode));
+ipcMain.handle('clippy:set-composer-settings', async (_event, mode, settings = {}) => {
+  if (mode === 'chatgpt') {
+    const models = await chatgpt.listModels();
+    const selected = models.find((model) => model.id === settings.model) || models[0];
+    preferences.chatgpt = { selection: selected.id, model: selected.model, effort: selected.effort || null };
+  } else if (mode === 'codex') {
+    preferences.codex = {
+      model: settings.model || null,
+      effort: settings.effort || null,
+      permissions: settings.permissions || ':workspace',
+    };
+    bridge?.configureComposer(preferences.codex);
+  } else {
+    throw new Error('Unknown Clippy mode.');
+  }
+  savePreferences();
+  return getComposerOptions(mode);
+});
+ipcMain.handle('clippy:pick-files', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Attach files to Clippy',
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (result.canceled) return [];
+  return result.filePaths.map((filePath) => attachmentDescriptor(filePath));
+});
+ipcMain.handle('clippy:save-pasted-file', (_event, payload = {}) => {
+  const bytes = Buffer.from(payload.bytes || []);
+  if (!bytes.length) throw new Error('That pasted file was empty.');
+  if (bytes.length > 25 * 1024 * 1024) throw new Error('Keep pasted files under 25 MB.');
+  const safeName = path.basename(String(payload.name || 'pasted-image.png')).replace(/[^a-zA-Z0-9._-]/g, '-');
+  const directory = path.join(app.getPath('userData'), 'attachments');
+  fs.mkdirSync(directory, { recursive: true });
+  const filePath = path.join(directory, `${randomUUID()}-${safeName}`);
+  fs.writeFileSync(filePath, bytes);
+  return attachmentDescriptor(filePath, payload.mimeType);
+});
+ipcMain.handle('clippy:send', async (_event, submitted) => {
+  const payload = typeof submitted === 'string' ? { text: submitted, attachments: [] } : (submitted || {});
+  const clean = typeof payload.text === 'string' ? payload.text.trim() : '';
+  const attachments = Array.isArray(payload.attachments)
+    ? payload.attachments.filter((attachment) => attachment?.path && fs.existsSync(attachment.path)).slice(0, 10)
+    : [];
+  if (!clean && !attachments.length) throw new Error('Give Clippy something to do first.');
+  const visibleText = [clean, ...attachments.map((attachment) => `📎 ${attachment.name}`)].filter(Boolean).join('\n');
   state.busy = true;
   if (state.mode === 'chatgpt') {
     const chat = state.threadId ? getChatGptChat(chatGptHistoryPath(), state.threadId) : ensureActiveChatGptChat(chatGptHistoryPath());
     state.threadId = chat.id;
     activeChatGptChatId = chat.id;
-    appendChatGptMessage(chatGptHistoryPath(), chat.id, { role: 'user', text: clean });
+    appendChatGptMessage(chatGptHistoryPath(), chat.id, { role: 'user', text: visibleText });
     emit({ type: 'notification', message: { method: 'turn/started', params: { mode: 'chatgpt' } } });
     try {
       const result = await chatgpt.send({
         text: clean,
         conversationId: chat.conversationId,
         parentMessageId: chat.parentMessageId,
+        model: preferences.chatgpt.model,
+        effort: preferences.chatgpt.effort,
+        attachments,
       });
       updateChatGptChat(chatGptHistoryPath(), chat.id, (current) => ({
         ...current,
@@ -454,7 +588,7 @@ ipcMain.handle('clippy:send', async (_event, text) => {
     }
   }
   try {
-    const turn = await bridge.sendPrompt(clean);
+    const turn = await bridge.sendPrompt({ text: clean, attachments }, preferences.codex);
     return { turnId: turn.id };
   } catch (error) {
     state.busy = false;
@@ -539,14 +673,17 @@ ipcMain.on('clippy:hide', () => mainWindow.hide());
 ipcMain.on('clippy:quit', () => { quitting = true; app.quit(); });
 
 app.whenReady().then(() => {
-  state.mode = loadMode();
+  preferences = loadPreferences();
+  state.mode = preferences.mode;
   codexThreadId = loadSavedThread();
   if (state.mode === 'chatgpt') {
     const chat = ensureActiveChatGptChat(chatGptHistoryPath());
     state.threadId = chat.id;
     state.status = chatGptStatus;
   } else {
-    state.threadId = codexThreadId;
+    // The app server owns thread materialization. Wait for its `thread` event
+    // instead of asking the renderer to read a remembered id during startup.
+    state.threadId = null;
     state.status = codexStatus;
   }
   createWindow();

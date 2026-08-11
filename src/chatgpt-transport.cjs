@@ -24,7 +24,63 @@ function readCodexAuth(authPath = path.join(os.homedir(), '.codex', 'auth.json')
   return { token, accountId, expiresAt };
 }
 
-function buildConversationBody({ text, conversationId = null, parentMessageId = null, hideFromHistory = false }) {
+function normalizeChatGptModels(catalog = {}) {
+  const models = [{ id: 'auto', model: 'auto', effort: null, label: 'Auto' }];
+  const seen = new Set(['auto']);
+  for (const version of catalog.versions || []) {
+    if (!version?.enabled) continue;
+    const presets = version.intelligence_presets || [];
+    if (!presets.length) {
+      for (const slug of version.slugs || []) {
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+        models.push({ id: slug, model: slug, effort: null, label: version.display_text_full || slug });
+      }
+      continue;
+    }
+    for (const preset of presets) {
+      if (preset.preset_type && preset.preset_type !== 'available') continue;
+      const effort = preset.thinking_effort || null;
+      const id = `${preset.model_slug}${effort ? `:${effort}` : ''}`;
+      if (!preset.model_slug || seen.has(id)) continue;
+      seen.add(id);
+      models.push({
+        id,
+        model: preset.model_slug,
+        effort,
+        label: preset.selected_display_title || `${version.display_text || version.id} ${preset.title}`,
+      });
+    }
+  }
+  return models;
+}
+
+function buildConversationBody({
+  text,
+  conversationId = null,
+  parentMessageId = null,
+  hideFromHistory = false,
+  model = 'auto',
+  effort = null,
+  attachments = [],
+}) {
+  const imageParts = attachments
+    .filter((attachment) => attachment.kind === 'image' && attachment.fileId)
+    .map((attachment) => ({
+      content_type: 'image_asset_pointer',
+      asset_pointer: `file-service://${attachment.fileId}`,
+      size_bytes: attachment.size,
+      width: attachment.width || 1,
+      height: attachment.height || 1,
+    }));
+  const fileAttachments = attachments
+    .filter((attachment) => attachment.kind !== 'image' && attachment.fileId)
+    .map((attachment) => ({
+      id: attachment.fileId,
+      size: attachment.size,
+      name: attachment.name,
+      mime_type: attachment.mimeType || 'application/octet-stream',
+    }));
   return {
     action: 'next',
     client_prepare_state: 'sent',
@@ -32,11 +88,15 @@ function buildConversationBody({ text, conversationId = null, parentMessageId = 
     hide_from_history: Boolean(hideFromHistory),
     messages: [{
       author: { role: 'user' },
-      content: { content_type: 'text', parts: [text] },
+      content: {
+        content_type: imageParts.length ? 'multimodal_text' : 'text',
+        parts: [text || '', ...imageParts],
+      },
       id: randomUUID(),
-      metadata: {},
+      metadata: fileAttachments.length ? { attachments: fileAttachments } : {},
     }],
-    model: 'auto',
+    model: model || 'auto',
+    ...(effort ? { thinking_effort: effort } : {}),
     parent_message_id: parentMessageId || randomUUID(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     timezone_offset_min: new Date().getTimezoneOffset(),
@@ -112,6 +172,73 @@ class ChatGptTransport extends EventEmitter {
     return auth;
   }
 
+  async listModels() {
+    if (!this.ready) await this.start();
+    const auth = await this.ensureAuthenticated();
+    const catalog = await this.window.webContents.executeJavaScript(`fetch('/backend-api/models?history_and_training_disabled=false', {
+      headers: {
+        authorization: ${JSON.stringify(`Bearer ${auth.token}`)},
+        'chatgpt-account-id': ${JSON.stringify(auth.accountId)},
+        'oai-language': navigator.language || 'en-US'
+      }
+    }).then(async (response) => {
+      if (!response.ok) throw new Error('ChatGPT model list failed (' + response.status + ').');
+      return response.json();
+    })`);
+    return normalizeChatGptModels(catalog);
+  }
+
+  async uploadAttachments(attachments = []) {
+    if (!attachments.length) return [];
+    if (!this.ready) await this.start();
+    const auth = await this.ensureAuthenticated();
+    const files = attachments.map((attachment) => ({
+      ...attachment,
+      bytes: fs.readFileSync(attachment.path).toString('base64'),
+    }));
+    return this.window.webContents.executeJavaScript(`(async () => {
+      const files = ${JSON.stringify(files)};
+      const headers = {
+        authorization: ${JSON.stringify(`Bearer ${auth.token}`)},
+        'chatgpt-account-id': ${JSON.stringify(auth.accountId)},
+        'content-type': 'application/json',
+        'oai-language': navigator.language || 'en-US',
+        originator: 'codex_clippy'
+      };
+      const results = [];
+      for (const file of files) {
+        const created = await fetch('/backend-api/files', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            file_name: file.name,
+            file_size: file.size,
+            mime_type: file.mimeType,
+            use_case: file.kind === 'image' ? 'multimodal' : 'my_files',
+            timezone_offset_min: new Date().getTimezoneOffset(),
+            reset_rate_limits: false,
+            supports_direct_azure_multipart: true,
+          }),
+        });
+        if (!created.ok) throw new Error('ChatGPT file setup failed (' + created.status + ').');
+        const slot = await created.json();
+        const binary = Uint8Array.from(atob(file.bytes), (character) => character.charCodeAt(0));
+        const uploaded = await fetch(slot.upload_url, {
+          method: 'PUT',
+          headers: { 'content-type': file.mimeType, 'x-ms-blob-type': 'BlockBlob' },
+          body: binary,
+        });
+        if (!uploaded.ok) throw new Error('ChatGPT file upload failed (' + uploaded.status + ').');
+        const marked = await fetch('/backend-api/files/' + slot.file_id + '/uploaded', {
+          method: 'POST', headers, body: '{}',
+        });
+        if (!marked.ok) throw new Error('ChatGPT file finalization failed (' + marked.status + ').');
+        results.push({ ...file, bytes: undefined, fileId: slot.file_id });
+      }
+      return results;
+    })()`);
+  }
+
   receivePageEvent(sender, payload) {
     if (!this.window || this.window.isDestroyed() || sender !== this.window.webContents) return false;
     const requestId = payload?.requestId;
@@ -120,11 +247,12 @@ class ChatGptTransport extends EventEmitter {
     return true;
   }
 
-  async send({ text, conversationId, parentMessageId, hideFromHistory = false }) {
+  async send({ text, conversationId, parentMessageId, hideFromHistory = false, model = 'auto', effort = null, attachments = [] }) {
     if (!this.ready) await this.start();
     const auth = await this.ensureAuthenticated();
     const requestId = randomUUID();
-    const body = buildConversationBody({ text, conversationId, parentMessageId, hideFromHistory });
+    const uploadedAttachments = await this.uploadAttachments(attachments);
+    const body = buildConversationBody({ text, conversationId, parentMessageId, hideFromHistory, model, effort, attachments: uploadedAttachments });
     this.requests.set(requestId, true);
     this.emit('event', { requestId, type: 'started' });
     try {
@@ -151,4 +279,4 @@ class ChatGptTransport extends EventEmitter {
   }
 }
 
-module.exports = { buildConversationBody, ChatGptTransport, readCodexAuth };
+module.exports = { buildConversationBody, ChatGptTransport, normalizeChatGptModels, readCodexAuth };

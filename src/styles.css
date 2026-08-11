@@ -21,15 +21,15 @@ html, body {
 
 body { color: var(--ink); }
 
-button, textarea { font: inherit; }
-button, textarea, .request-panel { user-select: text; }
+button, textarea, select { font: inherit; }
+button, textarea, select, .request-panel { user-select: text; }
 
 .bubble {
   position: absolute;
   right: 154px;
   bottom: 104px;
   width: 420px;
-  max-height: 382px;
+  max-height: 438px;
   display: flex;
   flex-direction: column;
   border: 2px solid var(--border);
@@ -362,6 +362,77 @@ header {
   user-select: text;
 }
 #prompt:focus { border-color: var(--violet); box-shadow: 0 0 0 2px rgba(101,95,153,.17); }
+
+.attachment-list {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+.attachment-list[hidden] { display: none; }
+.attachment-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  max-width: 155px;
+  gap: 5px;
+  padding: 3px 5px 3px 4px;
+  border: 1px solid rgba(52,50,15,.35);
+  border-radius: 5px;
+  background: rgba(255,255,255,.38);
+  font-size: 9px;
+}
+.attachment-chip img { width: 22px; height: 22px; border-radius: 3px; object-fit: cover; }
+.attachment-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip button { border: 0; background: transparent; cursor: pointer; padding: 0 1px; color: #6e271f; font-weight: 700; }
+
+.composer-options {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+  margin-top: 6px;
+}
+.attach-button {
+  flex: 0 0 29px;
+  border: 1px solid rgba(52,50,15,.48);
+  border-radius: 5px;
+  background: rgba(255,255,255,.34);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+.composer-select {
+  min-width: 0;
+  flex: 1 1 92px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 1px solid rgba(52,50,15,.38);
+  border-radius: 5px;
+  background: rgba(255,255,255,.3);
+}
+.composer-select[hidden] { display: none; }
+.composer-select span { flex: 0 0 auto; font-size: 7px; font-weight: 800; letter-spacing: .08em; opacity: .58; }
+.composer-select select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.composer-select select:disabled, .attach-button:disabled { opacity: .48; cursor: wait; }
+.model-select-wrap { flex-basis: 118px; }
+.permission-select-wrap:has(option[value=":danger-full-access"]:checked) {
+  border-color: #9a3c31;
+  background: rgba(192,74,61,.12);
+}
 
 .composer-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; }
 .composer-footer > span { font-size: 9px; opacity: .52; }

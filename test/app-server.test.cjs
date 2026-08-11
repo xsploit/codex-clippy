@@ -102,6 +102,41 @@ test('names a fresh thread before starting its first turn', async () => {
   assert.equal(calls[0].params.name, 'Make the menu persistent');
 });
 
+test('starts a multimodal turn with selected model, effort, and permissions', async () => {
+  const bridge = new CodexAppServer();
+  bridge.ready = true;
+  bridge.threadId = 'thread-1';
+  bridge.threadName = 'Attachments';
+  let call;
+  bridge.request = async (method, params) => {
+    call = { method, params };
+    return { turn: { id: 'turn-1' } };
+  };
+  await bridge.sendPrompt({
+    text: 'Compare these',
+    attachments: [
+      { kind: 'image', name: 'screen.png', path: 'C:\\screen.png' },
+      { kind: 'file', name: 'notes.md', path: 'C:\\notes.md' },
+    ],
+  }, { model: 'gpt-5.6-sol', effort: 'high', permissions: ':danger-full-access' });
+  assert.equal(call.method, 'turn/start');
+  assert.deepEqual(call.params.input, [
+    { type: 'text', text: 'Compare these', text_elements: [] },
+    { type: 'localImage', path: 'C:\\screen.png', detail: 'auto' },
+    { type: 'mention', name: 'notes.md', path: 'C:\\notes.md' },
+  ]);
+  assert.equal(call.params.model, 'gpt-5.6-sol');
+  assert.equal(call.params.effort, 'high');
+  assert.equal(call.params.permissions, ':danger-full-access');
+});
+
+test('loads models and permission profiles from the app server', async () => {
+  const bridge = new CodexAppServer();
+  bridge.request = async (method) => ({ data: [{ id: method }] });
+  assert.deepEqual(await bridge.listModels(), [{ id: 'model/list' }]);
+  assert.deepEqual(await bridge.listPermissionProfiles(), [{ id: 'permissionProfile/list' }]);
+});
+
 test('reads an unmaterialized fresh thread as an empty chat', async () => {
   const bridge = new CodexAppServer();
   const calls = [];

@@ -2,7 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('codexClippy', {
   getState: () => ipcRenderer.invoke('clippy:get-state'),
-  send: (text) => ipcRenderer.invoke('clippy:send', text),
+  send: (payload) => ipcRenderer.invoke('clippy:send', payload),
+  getComposerOptions: (mode) => ipcRenderer.invoke('clippy:get-composer-options', mode),
+  setComposerSettings: (mode, settings) => ipcRenderer.invoke('clippy:set-composer-settings', mode, settings),
+  pickFiles: () => ipcRenderer.invoke('clippy:pick-files'),
+  savePastedFile: (payload) => ipcRenderer.invoke('clippy:save-pasted-file', payload),
   stop: () => ipcRenderer.invoke('clippy:stop'),
   transcribe: (audio, mimeType) => ipcRenderer.invoke('clippy:transcribe', audio, mimeType),
   startTranscription: () => ipcRenderer.invoke('clippy:transcription-start'),
