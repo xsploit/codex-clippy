@@ -15,6 +15,7 @@ A tiny, always-on-top Windows assistant with a resolution-independent, dynamical
 - Regular streamed ChatGPT conversation through the account already authenticated by Codex
 - Full Codex app-server mode for repositories, tools, approvals, skills, apps, and computer use
 - Codex-style live activity timeline with safe reasoning summaries, tool and command progress, file changes, and expandable image previews
+- Native clipboard buttons on fenced code and expandable Codex command/tool output
 - Live model picker in both modes, with Codex reasoning-effort controls
 - Codex access profiles for read-only, workspace, or full computer/filesystem access
 - File picker, drag-and-drop attachments, image previews, and direct clipboard image pasting

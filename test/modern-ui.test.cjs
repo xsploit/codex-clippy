@@ -25,6 +25,9 @@ test('ships fullscreen pet mode, five skins, font choices, and activity cards', 
   assert.doesNotMatch(renderer, /method === 'item\/reasoning\/textDelta'/);
   assert.match(renderer, /item\/commandExecution\/outputDelta/);
   assert.match(renderer, /event\.key === 'Enter' && !event\.ctrlKey/);
+  assert.match(renderer, /api\.copyText\(value\)/);
+  assert.match(renderer, /enhanceMessageCode\(node\)/);
+  assert.match(styles, /\.copy-button/);
   assert.match(renderer, /setPetCollapsed\(true\)/);
   assert.match(renderer, /setPetCollapsed\(false\)/);
   assert.match(styles, /\.pet-collapsed \{ background: transparent; \}/);

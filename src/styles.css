@@ -403,9 +403,10 @@ header {
   user-select: text;
 }
 .transcript .assistant-message pre {
+  position: relative;
   max-width: 100%;
   margin: 8px 0 10px;
-  padding: 9px;
+  padding: 34px 9px 9px;
   overflow: auto;
   border: 1px solid rgba(70, 64, 31, .34);
   border-radius: 6px;
@@ -420,6 +421,48 @@ header {
   color: inherit;
   white-space: pre;
 }
+.copyable { position: relative; }
+.copy-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  min-width: 25px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--code-surface) 82%, transparent);
+  color: var(--code-text);
+  cursor: pointer;
+  opacity: .78;
+  user-select: none;
+}
+.copy-button:hover,
+.copy-button:focus-visible { opacity: 1; }
+.copy-glyph {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+.copy-glyph::before,
+.copy-glyph::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1.4px solid currentColor;
+  border-radius: 2px;
+}
+.copy-glyph::before { top: 0; left: 0; }
+.copy-glyph::after { right: 0; bottom: 0; background: var(--code-surface); }
+.copy-feedback { display: none; font: 10px/1 "Segoe UI", sans-serif; }
+.copy-button.copied .copy-glyph { display: none; }
+.copy-button.copied .copy-feedback { display: inline; }
 .transcript .assistant-message blockquote {
   margin: 8px 0 10px;
   padding-left: 10px;
@@ -647,7 +690,7 @@ header {
 .activity-body {
   max-height: 130px;
   margin: 0;
-  padding: 9px 11px;
+  padding: 34px 11px 9px;
   margin: 0 0 5px 38px;
   overflow: auto;
   border: 1px solid var(--line);
@@ -659,6 +702,7 @@ header {
   word-break: break-word;
   user-select: text;
 }
+.activity-content { min-height: 1em; }
 .activity-preview {
   display: block;
   width: auto;

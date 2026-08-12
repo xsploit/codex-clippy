@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell: electronShell, Tray } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, screen, session, shell: electronShell, Tray } = require('electron');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -533,6 +533,40 @@ function createWindow() {
             })()`);
             if (!previewOpened) throw new Error('Activity image preview did not render for capture.');
           }
+          if (process.env.CODEX_CLIPPY_DEMO_COPY_UI === '1') {
+            const code = 'Get-Process | Where-Object { $_.CPU -gt 10 }\n';
+            const previousClipboard = clipboard.readText();
+            emit({
+              type: 'notification',
+              message: { method: 'chatgpt/message', params: { text: `Here is the PowerShell:\n\n\`\`\`powershell\n${code}\`\`\`` } },
+            });
+            emit({
+              type: 'notification',
+              message: { method: 'item/completed', params: { item: { id: 'copy-demo-command', type: 'commandExecution', command: 'npm test', aggregatedOutput: '38 tests passed', status: 'completed' } } },
+            });
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            const copyReady = await mainWindow.webContents.executeJavaScript(`(() => {
+              const button = document.querySelector('.assistant-message:last-child pre .copy-button');
+              button?.click();
+              return Boolean(button);
+            })()`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const copied = clipboard.readText();
+            if (!copyReady || copied !== code) throw new Error('Code-block copy control did not copy the exact code text.');
+            const activityCopyReady = await mainWindow.webContents.executeJavaScript(`(() => {
+              const details = document.querySelector('.activity-commandExecution');
+              details?.setAttribute('open', '');
+              const button = details?.querySelector('.copy-button');
+              button?.click();
+              return Boolean(button);
+            })()`);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const activityCopied = clipboard.readText();
+            clipboard.writeText(previousClipboard);
+            if (!activityCopyReady || activityCopied !== '$ npm test\n\n38 tests passed') {
+              throw new Error('Activity copy control did not copy the exact command and output text.');
+            }
+          }
           await new Promise((resolve) => setTimeout(resolve, 500));
           const image = await mainWindow.webContents.capturePage();
           fs.writeFileSync(capturePath, image.toPNG());
@@ -904,6 +938,11 @@ ipcMain.handle('clippy:open-external', async (_event, rawUrl) => {
   const url = new URL(rawUrl);
   if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Only web links can be opened.');
   await electronShell.openExternal(url.toString());
+  return { ok: true };
+});
+ipcMain.handle('clippy:copy-text', (_event, value) => {
+  if (typeof value !== 'string') throw new Error('Only text can be copied.');
+  clipboard.writeText(value);
   return { ok: true };
 });
 ipcMain.handle('window:get-position', () => mainWindow.getPosition());

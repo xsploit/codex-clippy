@@ -21,3 +21,11 @@ test('escapes raw HTML and rejects executable or local links', () => {
   assert.doesNotMatch(html, /href=/);
   assert.match(html, /&lt;img/);
 });
+
+test('renders fenced code as a block that the Clippy UI can enhance with copy controls', () => {
+  const markdown = createClippyMarkdown();
+  const html = markdown.render('```js\nconsole.log("Clippy");\n```');
+
+  assert.match(html, /<pre><code class="language-js">/);
+  assert.match(html, /console\.log\(&quot;Clippy&quot;\);/);
+});

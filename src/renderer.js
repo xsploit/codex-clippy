@@ -211,9 +211,56 @@ function appendMessage(className, text) {
   return node;
 }
 
+function createCopyButton(label = 'Copy') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'copy-button';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  const glyph = document.createElement('span');
+  glyph.className = 'copy-glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  const feedback = document.createElement('span');
+  feedback.className = 'copy-feedback';
+  feedback.textContent = 'Copied';
+  button.append(glyph, feedback);
+  return button;
+}
+
+function ensureCopyButton(container) {
+  if (!container || container.querySelector(':scope > .copy-button')) return;
+  container.classList.add('copyable');
+  container.appendChild(createCopyButton());
+}
+
+function enhanceMessageCode(node) {
+  for (const block of node.querySelectorAll('pre')) ensureCopyButton(block);
+}
+
+async function copyFromButton(button) {
+  const container = button.closest('pre, .activity-body');
+  const source = container?.matches('pre')
+    ? container.querySelector('code')
+    : container?.querySelector('.activity-content');
+  const value = source?.textContent || '';
+  if (!value) return;
+  await api.copyText(value);
+  button.classList.add('copied');
+  button.setAttribute('aria-label', 'Copied');
+  button.title = 'Copied';
+  window.clearTimeout(button.copyResetTimer);
+  button.copyResetTimer = window.setTimeout(() => {
+    button.classList.remove('copied');
+    button.setAttribute('aria-label', 'Copy');
+    button.title = 'Copy';
+  }, 1_400);
+}
+
 function setMessageContent(node, text) {
-  if (node.classList.contains('assistant-message')) node.innerHTML = markdown.render(text || '');
-  else node.textContent = text;
+  if (node.classList.contains('assistant-message')) {
+    node.innerHTML = markdown.render(text || '');
+    enhanceMessageCode(node);
+  } else node.textContent = text;
 }
 
 function setBusy(next) {
@@ -497,13 +544,17 @@ function ensureActivityCard(item = {}) {
   summary.append(iconNode, heading, status);
   const body = document.createElement('div');
   body.className = 'activity-body';
+  const contentNode = document.createElement('div');
+  contentNode.className = 'activity-content';
   const content = activityBody(item);
-  body.textContent = content || 'Waiting for details…';
+  contentNode.textContent = content || 'Waiting for details…';
+  body.appendChild(contentNode);
+  if (content && item.type !== 'reasoning') ensureCopyButton(body);
   details.classList.toggle('has-details', Boolean(content));
   details.append(summary, body);
   activityFeed.appendChild(details);
   activityFeed.hidden = false;
-  record = { details, title, status, body, item: { ...item, id } };
+  record = { details, title, status, body, content: contentNode, item: { ...item, id } };
   activityNodes.set(id, record);
   if (item.type === 'imageView' && item.path) loadActivityImage(record, item.path);
   activityFeed.scrollTop = activityFeed.scrollHeight;
@@ -518,7 +569,8 @@ async function loadActivityImage(record, filePath) {
     image.className = 'activity-preview';
     image.src = preview;
     image.alt = `Viewed image: ${filePath}`;
-    record.body.replaceChildren(image);
+    record.content.replaceChildren(image);
+    record.body.querySelector(':scope > .copy-button')?.remove();
     record.details.classList.add('has-details');
   } catch (error) {
     console.warn(`Could not preview activity image: ${error.message}`);
@@ -532,8 +584,11 @@ function updateActivityItem(item = {}, completed = false) {
   record.title.textContent = activityTitle(record.item);
   const content = activityBody(record.item);
   if (content) {
-    record.body.textContent = content;
-    if (record.item.type !== 'reasoning') record.details.classList.add('has-details');
+    record.content.textContent = content;
+    if (record.item.type !== 'reasoning') {
+      record.details.classList.add('has-details');
+      ensureCopyButton(record.body);
+    }
   }
   if (completed) {
     const failed = item.status === 'failed' || Boolean(item.error);
@@ -546,19 +601,21 @@ function updateActivityItem(item = {}, completed = false) {
 function appendActivityDelta(itemId, delta) {
   if (!itemId || !delta) return;
   const record = activityNodes.get(itemId) || ensureActivityCard({ id: itemId, type: 'commandExecution' });
-  if (record.body.textContent === 'Waiting for details…') record.body.textContent = '';
-  if (!record.outputStarted && record.body.textContent) record.body.textContent += '\n\n';
+  if (record.content.textContent === 'Waiting for details…') record.content.textContent = '';
+  if (!record.outputStarted && record.content.textContent) record.content.textContent += '\n\n';
   record.outputStarted = true;
-  record.body.textContent += delta;
+  record.content.textContent += delta;
+  record.details.classList.add('has-details');
+  ensureCopyButton(record.body);
   activityFeed.scrollTop = activityFeed.scrollHeight;
 }
 
 function appendReasoningSummary(itemId, delta) {
   if (!itemId || !delta) return;
   const record = activityNodes.get(itemId) || ensureActivityCard({ id: itemId, type: 'reasoning' });
-  if (record.body.textContent === 'Waiting for details…') record.body.textContent = '';
-  record.body.textContent += delta;
-  record.title.textContent = record.body.textContent.trim().split(/\r?\n/, 1)[0] || 'Reasoning summary';
+  if (record.content.textContent === 'Waiting for details…') record.content.textContent = '';
+  record.content.textContent += delta;
+  record.title.textContent = record.content.textContent.trim().split(/\r?\n/, 1)[0] || 'Reasoning summary';
 }
 
 function formatChatTime(timestamp) {
@@ -1236,6 +1293,12 @@ form.addEventListener('submit', (event) => {
   submitPrompt();
 });
 transcript.addEventListener('click', async (event) => {
+  const copyButton = event.target.closest?.('.copy-button');
+  if (copyButton) {
+    event.preventDefault();
+    try { await copyFromButton(copyButton); } catch (error) { showError(error.message); }
+    return;
+  }
   const link = event.target.closest?.('.assistant-message a[href]');
   if (!link) return;
   event.preventDefault();
@@ -1244,6 +1307,13 @@ transcript.addEventListener('click', async (event) => {
   } catch (error) {
     showError(error.message);
   }
+});
+activityFeed.addEventListener('click', async (event) => {
+  const copyButton = event.target.closest?.('.copy-button');
+  if (!copyButton) return;
+  event.preventDefault();
+  event.stopPropagation();
+  try { await copyFromButton(copyButton); } catch (error) { showError(error.message); }
 });
 prompt.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.isComposing) {
