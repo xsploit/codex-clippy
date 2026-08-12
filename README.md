@@ -2,15 +2,19 @@
 
 A tiny, always-on-top Windows assistant with a resolution-independent, dynamically rigged SVG Clippy, regular ChatGPT conversation, and a real local Codex app-server mode for computer work.
 
-![Clippy v0.8 talking through a real signed-in ChatGPT web conversation](docs/clippy-v0.8-chatgpt-working.png)
+![Clippy v0.10 in Midnight fullscreen pet mode with live Codex activity](docs/clippy-v0.10-fullscreen.png)
 
 [Download the latest portable Windows build](https://github.com/xsploit/codex-clippy/releases/latest)
 
 ## What it does
 
 - Transparent, always-on-top Electron desktop companion with a dynamically rigged SVG Clippy
+- Compact companion and borderless fullscreen pet-chat layouts
+- Five persistent skins—Classic Paper, Codex Dark, Midnight Blue, Terminal Green, and Synthwave—with contrast-checked native controls
+- Five chat-font choices with Unicode-safe fallbacks
 - Regular streamed ChatGPT conversation through the account already authenticated by Codex
 - Full Codex app-server mode for repositories, tools, approvals, skills, apps, and computer use
+- Codex-style live activity timeline with safe reasoning summaries, tool and command progress, file changes, and expandable image previews
 - Live model picker in both modes, with Codex reasoning-effort controls
 - Codex access profiles for read-only, workspace, or full computer/filesystem access
 - File picker, drag-and-drop attachments, image previews, and direct clipboard image pasting
@@ -40,9 +44,13 @@ Use **＋** to select one or more files, drop files anywhere on the composer, or
 
 The ☰ button opens the separate chat list for the active mode, where earlier conversations can be restored and continued. In Chat mode it merges local Clippy chats with the signed-in account's current ChatGPT.com sidebar and labels their source as **CLIPPY** or **WEB**. Selecting a web chat loads its active message branch and continuation node, so the next message continues the original conversation rather than creating a copy. New ChatGPT chats are materialized locally as soon as they are created, before the first user message.
 
-The ⚙ button opens Clippy Settings. Changes save immediately: always-on-top and animation changes apply live, while launch visibility, starting bubble state, and starting mode apply the next time Clippy opens. The packaged build can also start with Windows. ChatGPT.com history syncing and its menu limit can be controlled independently without affecting Clippy's local chats.
+The ⛶ button switches between the compact transparent companion and a display-sized fullscreen chat canvas where Clippy lives alongside the active Codex work. The ⚙ button opens Clippy Settings. Changes save immediately: window mode, skin, font, always-on-top, and animation changes apply live, while launch visibility, starting bubble state, and starting mode apply the next time Clippy opens. The packaged build can also start with Windows. ChatGPT.com history syncing and its menu limit can be controlled independently without affecting Clippy's local chats.
+
+![Clippy v0.10 Synthwave settings](docs/clippy-v0.10-synthwave-settings.png)
 
 Assistant responses render Markdown with styled headings, lists, links, tables, blockquotes, and fenced code. Raw HTML stays disabled, and web links open in the system browser instead of navigating the companion window.
+
+In Codex mode, the app-server's structured item events appear as a compact activity timeline. Commands, file edits, MCP tools, web searches, image views, plans, and safe reasoning summaries update as they stream; rows with detail can be expanded without dumping raw hidden chain-of-thought. Press **Enter** to send, or **Ctrl+Enter** to insert a new line.
 
 Click **Speak**, dictate, then click **Stop mic**. With a valid API key, the microphone streams 24 kHz PCM16 to OpenAI Realtime transcription using `gpt-live-transcribe`; transcript deltas appear in the composer as you talk, and stopping the mic explicitly commits the audio turn. If that route is unavailable, Clippy sends the completed WebM recording through the same authenticated ChatGPT transcription endpoint used by the installed Codex desktop app. Local `faster-whisper` is the last fallback. Dictation never sends the message until you click **Ask** or **Do it**.
 

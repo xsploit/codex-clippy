@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('codexClippy', {
   setComposerSettings: (mode, settings) => ipcRenderer.invoke('clippy:set-composer-settings', mode, settings),
   pickFiles: () => ipcRenderer.invoke('clippy:pick-files'),
   savePastedFile: (payload) => ipcRenderer.invoke('clippy:save-pasted-file', payload),
+  previewLocalImage: (filePath) => ipcRenderer.invoke('clippy:preview-local-image', filePath),
   stop: () => ipcRenderer.invoke('clippy:stop'),
   transcribe: (audio, mimeType) => ipcRenderer.invoke('clippy:transcribe', audio, mimeType),
   startTranscription: () => ipcRenderer.invoke('clippy:transcription-start'),

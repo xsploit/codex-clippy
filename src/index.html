@@ -25,6 +25,7 @@
           </div>
           <div class="window-actions">
             <button id="chat-history" type="button" title="Chats" aria-label="Open chat history" aria-expanded="false">☰</button>
+            <button id="fullscreen" type="button" title="Fullscreen pet mode" aria-label="Enter fullscreen pet mode" aria-pressed="false">⛶</button>
             <button id="settings" type="button" title="Settings" aria-label="Open Clippy settings" aria-expanded="false">⚙</button>
             <button id="new-chat" type="button" title="New chat" aria-label="New chat">↻</button>
             <button id="collapse" type="button" title="Collapse" aria-label="Collapse">—</button>
@@ -57,6 +58,13 @@
           <div class="settings-scroll">
             <fieldset>
               <legend>WINDOW</legend>
+              <label class="setting-row select-row">
+                <span><strong>Window mode</strong><small>Compact companion or fullscreen pet chat</small></span>
+                <select id="setting-display-mode" aria-label="Window mode">
+                  <option value="compact">Compact</option>
+                  <option value="fullscreen">Fullscreen pet</option>
+                </select>
+              </label>
               <label class="setting-row">
                 <span><strong>Always on top</strong><small>Keep Clippy above your other windows</small></span>
                 <input id="setting-always-on-top" type="checkbox" />
@@ -72,6 +80,30 @@
               <label class="setting-row">
                 <span><strong>Animate Clippy</strong><small>Play reactions while Clippy works</small></span>
                 <input id="setting-animations" type="checkbox" />
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>APPEARANCE</legend>
+              <label class="setting-row select-row">
+                <span><strong>Skin</strong><small>Same layout, different attitude</small></span>
+                <select id="setting-skin" aria-label="Clippy skin">
+                  <option value="classic">Classic Paper</option>
+                  <option value="codex">Codex Dark</option>
+                  <option value="midnight">Midnight Blue</option>
+                  <option value="terminal">Terminal Green</option>
+                  <option value="synthwave">Synthwave</option>
+                </select>
+              </label>
+              <label class="setting-row select-row">
+                <span><strong>Chat font</strong><small>Unicode-safe and stylistic alternatives</small></span>
+                <select id="setting-font" aria-label="Chat font">
+                  <option value="system">System Unicode</option>
+                  <option value="classic">Classic Tahoma</option>
+                  <option value="friendly">Friendly</option>
+                  <option value="mono">Cascadia Mono</option>
+                  <option value="serif">Readable Serif</option>
+                </select>
               </label>
             </fieldset>
 
@@ -117,6 +149,8 @@
           <div class="assistant-message"><p>Bahha bro. It looks like you’re trying to boss around a repository. Want help?</p></div>
         </div>
 
+        <section id="activity-feed" class="activity-feed" aria-label="Codex activity" hidden></section>
+
         <div id="request-panel" class="request-panel" hidden></div>
 
         <form id="composer">
@@ -138,7 +172,7 @@
             </label>
           </div>
           <div class="composer-footer">
-            <span>Paste images · Ctrl + Enter</span>
+            <span>Enter sends · Ctrl + Enter makes a new line</span>
             <div>
               <button id="mic" class="mic-button secondary" type="button" title="Dictate with local Whisper" aria-label="Start dictation" aria-pressed="false">🎙 Speak</button>
               <button id="stop" class="secondary" type="button" hidden>Stop</button>

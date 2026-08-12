@@ -58,6 +58,7 @@ let chatGptStatus = { state: 'starting', label: 'Connecting ChatGPT…' };
 let activeChatGptChatId = null;
 const liveRequests = new Map();
 let preferences;
+let compactWindowBounds = null;
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'clippy-state.json');
@@ -91,6 +92,19 @@ function loginExecutablePath() {
 function applyRuntimeSettings() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setAlwaysOnTop(preferences.settings.alwaysOnTop, preferences.settings.alwaysOnTop ? 'floating' : 'normal');
+    const wantsFullscreen = preferences.settings.displayMode === 'fullscreen';
+    mainWindow.setResizable(true);
+    mainWindow.setSkipTaskbar(!wantsFullscreen);
+    if (wantsFullscreen) {
+      // Transparent frameless windows do not reliably enter native fullscreen
+      // on Windows. A display-sized borderless window is deterministic and
+      // preserves the click-through desktop-pet behavior.
+      const display = screen.getDisplayMatching(mainWindow.getBounds());
+      mainWindow.setBounds(display.bounds, false);
+    } else if (compactWindowBounds) {
+      mainWindow.setBounds(compactWindowBounds, false);
+    }
+    mainWindow.setResizable(false);
   }
   if (app.isPackaged) {
     try {
@@ -320,11 +334,14 @@ function emit(payload) {
 function createWindow() {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const area = display.workArea;
-  mainWindow = new BrowserWindow({
+  compactWindowBounds = {
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
     x: area.x + area.width - WINDOW_WIDTH - 12,
     y: area.y + area.height - WINDOW_HEIGHT - 12,
+  };
+  mainWindow = new BrowserWindow({
+    ...compactWindowBounds,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -394,6 +411,23 @@ function createWindow() {
             if (composerReady) break;
             await new Promise((resolve) => setTimeout(resolve, 500));
           }
+          if (process.env.CODEX_CLIPPY_DEMO_TOGGLE_FULLSCREEN === '1') {
+            await mainWindow.webContents.executeJavaScript(`document.querySelector('#fullscreen')?.click()`);
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              const displayBounds = screen.getDisplayMatching(mainWindow.getBounds()).bounds;
+              const windowBounds = mainWindow.getBounds();
+              const fillsDisplay = ['x', 'y', 'width', 'height'].every((key) => windowBounds[key] === displayBounds[key]);
+              const fullscreenReady = fillsDisplay && await mainWindow.webContents.executeJavaScript(
+                `document.body.dataset.displayMode === 'fullscreen'`,
+              );
+              if (fullscreenReady) break;
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            const displayBounds = screen.getDisplayMatching(mainWindow.getBounds()).bounds;
+            const windowBounds = mainWindow.getBounds();
+            const fillsDisplay = ['x', 'y', 'width', 'height'].every((key) => windowBounds[key] === displayBounds[key]);
+            if (!fillsDisplay) throw new Error('Fullscreen pet mode did not fill the display for capture.');
+          }
           if (process.env.CODEX_CLIPPY_DEMO_OPEN_HISTORY === '1') {
             await mainWindow.webContents.executeJavaScript(`document.querySelector('#chat-history')?.click()`);
             for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -426,6 +460,35 @@ function createWindow() {
               await new Promise((resolve) => setTimeout(resolve, 250));
             }
             if (!settingsReady) throw new Error('Settings menu did not open for capture.');
+          }
+          if (process.env.CODEX_CLIPPY_DEMO_ACTIVITY === '1') {
+            const demoEvents = [
+              { method: 'item/started', params: { item: { id: 'demo-reasoning', type: 'reasoning', summary: [] } } },
+              { method: 'item/reasoning/summaryTextDelta', params: { itemId: 'demo-reasoning', summaryIndex: 0, delta: 'Inspecting the current layout and mapping responsive surfaces.' } },
+              { method: 'item/completed', params: { item: { id: 'demo-reasoning', type: 'reasoning', summary: ['Inspecting the current layout and mapping responsive surfaces.'] } } },
+              { method: 'item/started', params: { item: { id: 'demo-command', type: 'commandExecution', command: 'npm test', cwd: process.cwd(), commandActions: [], status: 'inProgress' } } },
+              { method: 'item/commandExecution/outputDelta', params: { itemId: 'demo-command', delta: '35 tests passed\n' } },
+              { method: 'item/completed', params: { item: { id: 'demo-command', type: 'commandExecution', command: 'npm test', cwd: process.cwd(), commandActions: [], aggregatedOutput: '35 tests passed', durationMs: 1840, exitCode: 0, status: 'completed' } } },
+              { method: 'item/started', params: { item: { id: 'demo-tool', type: 'mcpToolCall', server: 'computer-use', tool: 'inspect_screen', arguments: { surface: 'Codex fullscreen pet mode' }, status: 'inProgress' } } },
+              { method: 'item/mcpToolCall/progress', params: { itemId: 'demo-tool', message: 'Checking the live desktop composition…' } },
+              { method: 'item/started', params: { item: { id: 'demo-image', type: 'imageView', path: path.join(process.cwd(), 'tmp', 'compact-settings.png') } } },
+              { method: 'item/completed', params: { item: { id: 'demo-image', type: 'imageView', path: path.join(process.cwd(), 'tmp', 'compact-settings.png') } } },
+            ];
+            for (const message of demoEvents) emit({ type: 'notification', message });
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+              const previewReady = await mainWindow.webContents.executeJavaScript(
+                `Boolean(document.querySelector('.activity-imageView .activity-preview'))`,
+              );
+              if (previewReady) break;
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            const previewOpened = await mainWindow.webContents.executeJavaScript(`(() => {
+              const details = document.querySelector('.activity-imageView');
+              if (!details?.querySelector('.activity-preview')) return false;
+              details.open = true;
+              return details.open;
+            })()`);
+            if (!previewOpened) throw new Error('Activity image preview did not render for capture.');
           }
           await new Promise((resolve) => setTimeout(resolve, 500));
           const image = await mainWindow.webContents.capturePage();
@@ -471,6 +534,15 @@ function createTray() {
     { label: 'Show Clippy', click: () => mainWindow.showInactive() },
     { label: 'New chat', click: () => newChat() },
     { label: 'Settings…', click: () => { mainWindow.showInactive(); emit({ type: 'open-settings' }); } },
+    { label: preferences.settings.displayMode === 'fullscreen' ? 'Compact companion' : 'Fullscreen pet mode', click: () => {
+      preferences = updateUserSettings(preferences, {
+        displayMode: preferences.settings.displayMode === 'fullscreen' ? 'compact' : 'fullscreen',
+      });
+      savePreferences();
+      applyRuntimeSettings();
+      emit({ type: 'settings', settings: settingsPayload() });
+      createTray();
+    } },
     { type: 'separator' },
     { label: 'ChatGPT chat', type: 'radio', checked: state.mode === 'chatgpt', click: () => setMode('chatgpt') },
     { label: 'Codex tools', type: 'radio', checked: state.mode === 'codex', click: () => setMode('codex') },
@@ -608,11 +680,25 @@ ipcMain.handle('clippy:set-settings', (_event, patch) => {
   preferences = updateUserSettings(preferences, patch);
   savePreferences();
   applyRuntimeSettings();
+  createTray();
   const settings = settingsPayload();
   emit({ type: 'settings', settings });
   return settings;
 });
 ipcMain.handle('clippy:get-composer-options', (_event, mode) => getComposerOptions(mode));
+ipcMain.handle('clippy:preview-local-image', (_event, filePath) => {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  const image = nativeImage.createFromPath(path.resolve(filePath));
+  if (image.isEmpty()) return null;
+  const size = image.getSize();
+  const scale = Math.min(1, 320 / Math.max(size.width, size.height));
+  const preview = scale < 1 ? image.resize({
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+    quality: 'good',
+  }) : image;
+  return preview.toDataURL();
+});
 ipcMain.handle('clippy:set-composer-settings', async (_event, mode, settings = {}) => {
   if (mode === 'chatgpt') {
     const models = await chatgpt.listModels();

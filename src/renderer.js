@@ -14,6 +14,7 @@ const requestPanel = document.querySelector('#request-panel');
 const statusLabel = document.querySelector('#status-label');
 const statusDot = document.querySelector('#status-dot');
 const historyButton = document.querySelector('#chat-history');
+const fullscreenButton = document.querySelector('#fullscreen');
 const headerNewChatButton = document.querySelector('#new-chat');
 const chatMenu = document.querySelector('#chat-menu');
 const chatList = document.querySelector('#chat-list');
@@ -27,6 +28,9 @@ const settingAlwaysOnTop = document.querySelector('#setting-always-on-top');
 const settingShowOnLaunch = document.querySelector('#setting-show-on-launch');
 const settingBubbleOpen = document.querySelector('#setting-bubble-open');
 const settingAnimations = document.querySelector('#setting-animations');
+const settingDisplayMode = document.querySelector('#setting-display-mode');
+const settingSkin = document.querySelector('#setting-skin');
+const settingFont = document.querySelector('#setting-font');
 const settingOpenAtLogin = document.querySelector('#setting-open-at-login');
 const settingStartupMode = document.querySelector('#setting-startup-mode');
 const settingSyncWebHistory = document.querySelector('#setting-sync-web-history');
@@ -42,6 +46,7 @@ const effortSelect = document.querySelector('#effort-select');
 const effortWrap = document.querySelector('#effort-wrap');
 const permissionSelect = document.querySelector('#permission-select');
 const permissionWrap = document.querySelector('#permission-wrap');
+const activityFeed = document.querySelector('#activity-feed');
 
 let agent;
 let busy = false;
@@ -73,6 +78,7 @@ let composerOptions = null;
 let settingsState = null;
 let animationsEnabled = true;
 let settingsSaveTimer = null;
+const activityNodes = new Map();
 
 function readyLabel() {
   return currentMode === 'chatgpt' ? 'ChatGPT ready' : 'Codex ready';
@@ -262,9 +268,27 @@ function toggleBubble(show) {
   if (show) prompt.focus();
 }
 
+function positionAgent() {
+  if (!agent) return;
+  if (settingsState?.displayMode === 'fullscreen') {
+    const contentWidth = Math.min(820, window.innerWidth - 72);
+    const contentLeft = (window.innerWidth - contentWidth) / 2;
+    agent.moveTo(Math.max(24, Math.round(contentLeft - 225)), Math.min(window.innerHeight - 250, Math.round(window.innerHeight * .52)));
+  } else {
+    agent.moveTo(window.innerWidth - 224, window.innerHeight - 235);
+  }
+}
+
 function applyClientSettings(settings) {
   animationsEnabled = settings.animations !== false;
   document.body.classList.toggle('animations-disabled', !animationsEnabled);
+  document.body.dataset.displayMode = settings.displayMode;
+  document.body.dataset.skin = settings.skin;
+  document.body.dataset.font = settings.font;
+  fullscreenButton.setAttribute('aria-pressed', String(settings.displayMode === 'fullscreen'));
+  fullscreenButton.setAttribute('aria-label', settings.displayMode === 'fullscreen' ? 'Exit fullscreen pet mode' : 'Enter fullscreen pet mode');
+  fullscreenButton.title = settings.displayMode === 'fullscreen' ? 'Compact companion' : 'Fullscreen pet mode';
+  positionAgent();
   if (!animationsEnabled && agent) agent.play('RestPose', 0);
 }
 
@@ -274,6 +298,9 @@ function renderSettings(settings) {
   settingShowOnLaunch.checked = settings.showOnLaunch;
   settingBubbleOpen.checked = settings.bubbleOpenOnLaunch;
   settingAnimations.checked = settings.animations;
+  settingDisplayMode.value = settings.displayMode;
+  settingSkin.value = settings.skin;
+  settingFont.value = settings.font;
   settingOpenAtLogin.checked = settings.openAtLogin;
   settingOpenAtLogin.disabled = !settings.loginSupported;
   loginSettingDetail.textContent = settings.loginSupported
@@ -293,6 +320,9 @@ function settingsPatchFromForm() {
     showOnLaunch: settingShowOnLaunch.checked,
     bubbleOpenOnLaunch: settingBubbleOpen.checked,
     animations: settingAnimations.checked,
+    displayMode: settingDisplayMode.value,
+    skin: settingSkin.value,
+    font: settingFont.value,
     openAtLogin: settingOpenAtLogin.checked,
     startupMode: settingStartupMode.value,
     syncWebHistory: settingSyncWebHistory.checked,
@@ -313,6 +343,12 @@ async function saveSettings() {
   }
 }
 
+async function toggleDisplayMode() {
+  if (!settingsState) return;
+  settingDisplayMode.value = settingsState.displayMode === 'fullscreen' ? 'compact' : 'fullscreen';
+  await saveSettings();
+}
+
 function toggleSettings(show) {
   settingsMenu.hidden = !show;
   settingsButton.setAttribute('aria-expanded', String(show));
@@ -328,6 +364,7 @@ function renderPersistedMessages(messages = []) {
   responseNode = null;
   responseText = '';
   transcript.replaceChildren();
+  clearActivityFeed();
   if (!messages.length) {
     appendMessage('assistant-message', 'Fresh sheet of paper, bro. What are we making?');
     return;
@@ -335,6 +372,160 @@ function renderPersistedMessages(messages = []) {
   for (const message of messages) {
     appendMessage(message.role === 'user' ? 'user-message' : 'assistant-message', message.text);
   }
+}
+
+function clearActivityFeed() {
+  activityNodes.clear();
+  activityFeed.replaceChildren();
+  activityFeed.hidden = true;
+}
+
+function activityMeta(type) {
+  const meta = {
+    reasoning: ['THINKING', 'Reasoning summary', ''],
+    commandExecution: ['COMMAND', 'Running a command', '›_'],
+    fileChange: ['FILES', 'Editing files', '✎'],
+    mcpToolCall: ['TOOL', 'Using a tool', '◇'],
+    dynamicToolCall: ['TOOL', 'Using a tool', '◇'],
+    webSearch: ['SEARCH', 'Searched the web', '⌕'],
+    imageGeneration: ['IMAGE', 'Generated an image', '▧'],
+    imageView: ['VISION', 'Viewed an image', '▧'],
+    collabAgentToolCall: ['AGENT', 'Worked with another agent', '◎'],
+    subAgentActivity: ['AGENT', 'Worked with another agent', '◎'],
+    plan: ['PLAN', 'Updated the plan', '☷'],
+  };
+  return meta[type] || ['ACTIVITY', type || 'Working', '•'];
+}
+
+function activityTitle(item = {}) {
+  if (item.type === 'commandExecution') return item.status === 'inProgress' ? 'Running a command' : 'Ran a command';
+  if (item.type === 'fileChange') {
+    const count = item.changes?.length || 1;
+    return `${item.status === 'inProgress' ? 'Editing' : 'Edited'} ${count === 1 ? 'a file' : `${count} files`}`;
+  }
+  if (item.type === 'mcpToolCall') return `${item.status === 'inProgress' ? 'Using' : 'Used'} ${item.tool || item.server || 'a tool'}`;
+  if (item.type === 'dynamicToolCall') return `${item.status === 'inProgress' ? 'Using' : 'Used'} ${item.tool || item.namespace || 'a tool'}`;
+  if (item.type === 'webSearch') return item.status === 'inProgress' ? 'Searching the web' : 'Searched the web';
+  if (item.type === 'imageView') return 'Viewed an image';
+  if (item.type === 'imageGeneration') return item.status === 'inProgress' ? 'Generating an image' : 'Generated an image';
+  if (item.type === 'reasoning') return item.summary?.at(-1) || 'Reasoning summary';
+  if (item.type === 'plan') return 'Plan';
+  return activityMeta(item.type)[1];
+}
+
+function readableJson(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, (_key, nested) => {
+      if (typeof nested === 'string' && nested.length > 1_200) return `${nested.slice(0, 1_200)}…`;
+      return nested;
+    }, 2).slice(0, 16_000);
+  } catch { return String(value).slice(0, 16_000); }
+}
+
+function activityBody(item = {}) {
+  if (item.type === 'reasoning') return [...(item.summary || [])].join('\n\n');
+  if (item.type === 'commandExecution') {
+    return [item.command && `$ ${item.command}`, item.aggregatedOutput].filter(Boolean).join('\n\n');
+  }
+  if (item.type === 'fileChange') {
+    return (item.changes || []).map((change) => change.path || change.filePath || readableJson(change)).join('\n');
+  }
+  if (item.type === 'mcpToolCall' || item.type === 'dynamicToolCall') {
+    return [item.arguments && `Arguments\n${readableJson(item.arguments)}`, item.result && `Result\n${readableJson(item.result)}`, item.error?.message].filter(Boolean).join('\n\n');
+  }
+  return item.text || item.query || item.message || '';
+}
+
+function ensureActivityCard(item = {}) {
+  const id = item.id || `${item.type || 'activity'}-${activityNodes.size}`;
+  let record = activityNodes.get(id);
+  if (record) return record;
+  const [kind, fallback, icon] = activityMeta(item.type);
+  const details = document.createElement('details');
+  details.className = `activity-card activity-${item.type || 'generic'}`;
+  for (const existing of activityNodes.values()) existing.details.open = false;
+  details.open = false;
+  const summary = document.createElement('summary');
+  const iconNode = document.createElement('span');
+  iconNode.className = 'activity-icon';
+  iconNode.textContent = icon;
+  const heading = document.createElement('span');
+  heading.className = 'activity-heading';
+  const kindNode = document.createElement('small');
+  kindNode.textContent = kind;
+  const title = document.createElement('strong');
+  title.textContent = activityTitle(item) || fallback;
+  heading.append(kindNode, title);
+  const status = document.createElement('span');
+  status.className = 'activity-status running';
+  status.textContent = 'RUNNING';
+  summary.append(iconNode, heading, status);
+  const body = document.createElement('div');
+  body.className = 'activity-body';
+  const content = activityBody(item);
+  body.textContent = content || 'Waiting for details…';
+  details.classList.toggle('has-details', Boolean(content));
+  details.append(summary, body);
+  activityFeed.appendChild(details);
+  activityFeed.hidden = false;
+  record = { details, title, status, body, item: { ...item, id } };
+  activityNodes.set(id, record);
+  if (item.type === 'imageView' && item.path) loadActivityImage(record, item.path);
+  activityFeed.scrollTop = activityFeed.scrollHeight;
+  return record;
+}
+
+async function loadActivityImage(record, filePath) {
+  try {
+    const preview = await api.previewLocalImage(filePath);
+    if (!preview) return;
+    const image = document.createElement('img');
+    image.className = 'activity-preview';
+    image.src = preview;
+    image.alt = `Viewed image: ${filePath}`;
+    record.body.replaceChildren(image);
+    record.details.classList.add('has-details');
+  } catch (error) {
+    console.warn(`Could not preview activity image: ${error.message}`);
+  }
+}
+
+function updateActivityItem(item = {}, completed = false) {
+  if (!item.id && !item.type) return;
+  const record = ensureActivityCard(item);
+  record.item = { ...record.item, ...item };
+  record.title.textContent = activityTitle(record.item);
+  const content = activityBody(record.item);
+  if (content) {
+    record.body.textContent = content;
+    if (record.item.type !== 'reasoning') record.details.classList.add('has-details');
+  }
+  if (completed) {
+    const failed = item.status === 'failed' || Boolean(item.error);
+    record.status.className = `activity-status ${failed ? 'failed' : 'done'}`;
+    record.status.textContent = failed ? 'FAILED' : 'DONE';
+    if (item.durationMs != null) record.status.textContent += ` · ${(item.durationMs / 1000).toFixed(1)}s`;
+  }
+}
+
+function appendActivityDelta(itemId, delta) {
+  if (!itemId || !delta) return;
+  const record = activityNodes.get(itemId) || ensureActivityCard({ id: itemId, type: 'commandExecution' });
+  if (record.body.textContent === 'Waiting for details…') record.body.textContent = '';
+  if (!record.outputStarted && record.body.textContent) record.body.textContent += '\n\n';
+  record.outputStarted = true;
+  record.body.textContent += delta;
+  activityFeed.scrollTop = activityFeed.scrollHeight;
+}
+
+function appendReasoningSummary(itemId, delta) {
+  if (!itemId || !delta) return;
+  const record = activityNodes.get(itemId) || ensureActivityCard({ id: itemId, type: 'reasoning' });
+  if (record.body.textContent === 'Waiting for details…') record.body.textContent = '';
+  record.body.textContent += delta;
+  record.title.textContent = record.body.textContent.trim().split(/\r?\n/, 1)[0] || 'Reasoning summary';
 }
 
 function formatChatTime(timestamp) {
@@ -459,6 +650,7 @@ async function submitPrompt() {
   const text = prompt.value.trim();
   if ((!text && !attachments.length) || busy || recording || finishingTranscript) return;
   const submittedAttachments = attachments;
+  clearActivityFeed();
   const visibleText = [text, ...submittedAttachments.map((attachment) => `📎 ${attachment.name}`)].filter(Boolean).join('\n');
   appendMessage('user-message', visibleText);
   prompt.value = '';
@@ -874,17 +1066,22 @@ function handleNotification(message) {
     showItemActivity(params.item);
   } else if (method === 'item/completed') {
     completeItem(params.item);
+  } else if (method === 'item/reasoning/summaryTextDelta') {
+    appendReasoningSummary(params.itemId, params.delta);
   } else if (method === 'item/agentMessage/delta') {
     if (!responseNode) responseNode = appendMessage('assistant-message', '');
     responseText += params.delta || '';
     setMessageContent(responseNode, responseText);
     transcript.scrollTop = transcript.scrollHeight;
   } else if (method === 'item/commandExecution/outputDelta') {
+    appendActivityDelta(params.itemId, params.delta);
     safePlay('Searching', 'Processing');
   } else if (method === 'item/fileChange/patchUpdated') {
+    updateActivityItem({ id: params.itemId, type: 'fileChange', changes: params.changes });
     statusLabel.textContent = 'Updating files…';
     safePlay('Writing', 'Processing');
   } else if (method === 'item/mcpToolCall/progress') {
+    appendActivityDelta(params.itemId, `${params.message || 'Working…'}\n`);
     statusLabel.textContent = params.message ? String(params.message).slice(0, 54) : 'Using an app…';
   } else if (method === 'turn/plan/updated') {
     statusLabel.textContent = 'Making a plan…';
@@ -910,6 +1107,7 @@ function handleNotification(message) {
 }
 
 function showItemActivity(item = {}) {
+  if (item.type !== 'agentMessage' && item.type !== 'userMessage') updateActivityItem(item);
   if (item.type === 'commandExecution') {
     statusLabel.textContent = 'Running a command…';
     safePlay('Searching', 'Processing');
@@ -935,6 +1133,7 @@ function showItemActivity(item = {}) {
 }
 
 function completeItem(item = {}) {
+  if (item.type !== 'agentMessage' && item.type !== 'userMessage') updateActivityItem(item, true);
   if (item.type === 'agentMessage' && item.text && !responseText) {
     if (!responseNode) responseNode = appendMessage('assistant-message', '');
     responseText = item.text;
@@ -1012,7 +1211,7 @@ transcript.addEventListener('click', async (event) => {
   }
 });
 prompt.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && event.ctrlKey) {
+  if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.isComposing) {
     event.preventDefault();
     submitPrompt();
   }
@@ -1067,6 +1266,7 @@ permissionSelect.addEventListener('change', saveComposerSettings);
 document.querySelector('#stop').addEventListener('click', () => api.stop());
 micButton.addEventListener('click', () => recording ? stopDictation() : startDictation());
 historyButton.addEventListener('click', () => toggleChatMenu(chatMenu.hidden));
+fullscreenButton.addEventListener('click', toggleDisplayMode);
 closeChatMenuButton.addEventListener('click', () => toggleChatMenu(false));
 settingsButton.addEventListener('click', () => toggleSettings(settingsMenu.hidden));
 closeSettingsButton.addEventListener('click', () => toggleSettings(false));
@@ -1095,6 +1295,7 @@ window.addEventListener('mousemove', (event) => {
   }
 });
 window.addEventListener('beforeunload', () => cleanupDictation(true));
+window.addEventListener('resize', positionAgent);
 
 document.documentElement.dataset.clippyRendererReady = 'true';
 
@@ -1108,6 +1309,7 @@ async function installCharacterDrag() {
   }, true);
   el.addEventListener('pointerdown', async (event) => {
     if (event.button !== 0) return;
+    if (settingsState?.displayMode === 'fullscreen') return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const [x, y] = await api.getWindowPosition();
@@ -1124,7 +1326,7 @@ async function installCharacterDrag() {
   el.addEventListener('pointerup', (event) => {
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (!drag.moved) {
-      toggleBubble(bubble.hidden);
+      if (settingsState?.displayMode !== 'fullscreen') toggleBubble(bubble.hidden);
       safePlay('ClickedOn', 'Acknowledge');
     }
     drag = null;
@@ -1144,7 +1346,7 @@ async function boot() {
   if (currentThreadId) await loadChat(currentThreadId);
   agent = createClippySvgAgent();
   agent.show(true);
-  agent.moveTo(window.innerWidth - 224, window.innerHeight - 235);
+  positionAgent();
   installCharacterDrag();
   toggleBubble(settingsState.bubbleOpenOnLaunch !== false);
   safePlay('Wave', 'Greeting', 'GetAttention');
