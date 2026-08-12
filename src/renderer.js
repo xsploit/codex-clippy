@@ -78,6 +78,7 @@ let composerOptions = null;
 let settingsState = null;
 let animationsEnabled = true;
 let settingsSaveTimer = null;
+let petCollapsed = false;
 const activityNodes = new Map();
 
 function readyLabel() {
@@ -262,15 +263,43 @@ function showError(message) {
   safePlay('GetAttention', 'Alert', 'Confused');
 }
 
-function toggleBubble(show) {
+function setBubbleVisibility(show) {
   bubble.hidden = !show;
   openBubble.hidden = show;
   if (show) prompt.focus();
 }
 
+async function toggleBubble(show) {
+  const collapseFullscreen = !show && settingsState?.displayMode === 'fullscreen';
+  if (collapseFullscreen) {
+    petCollapsed = true;
+    document.body.classList.add('pet-collapsed');
+    setBubbleVisibility(false);
+    try {
+      await api.setPetCollapsed(true);
+    } catch (error) {
+      petCollapsed = false;
+      document.body.classList.remove('pet-collapsed');
+      setBubbleVisibility(true);
+      throw error;
+    }
+    positionAgent();
+    return;
+  }
+  if (show && petCollapsed) {
+    await api.setPetCollapsed(false);
+    petCollapsed = false;
+    document.body.classList.remove('pet-collapsed');
+    setBubbleVisibility(true);
+    requestAnimationFrame(positionAgent);
+    return;
+  }
+  setBubbleVisibility(show);
+}
+
 function positionAgent() {
   if (!agent) return;
-  if (settingsState?.displayMode === 'fullscreen') {
+  if (settingsState?.displayMode === 'fullscreen' && !petCollapsed) {
     const contentWidth = Math.min(820, window.innerWidth - 72);
     const contentLeft = (window.innerWidth - contentWidth) / 2;
     agent.moveTo(Math.max(24, Math.round(contentLeft - 225)), Math.min(window.innerHeight - 250, Math.round(window.innerHeight * .52)));
@@ -280,6 +309,10 @@ function positionAgent() {
 }
 
 function applyClientSettings(settings) {
+  if (settings.displayMode !== 'fullscreen' && petCollapsed) {
+    petCollapsed = false;
+    document.body.classList.remove('pet-collapsed');
+  }
   animationsEnabled = settings.animations !== false;
   document.body.classList.toggle('animations-disabled', !animationsEnabled);
   document.body.dataset.displayMode = settings.displayMode;
@@ -1173,7 +1206,9 @@ api.onEvent((event) => {
   else if (event.type === 'server-request') renderRequest(event.request);
   else if (event.type === 'error') showError(event.message);
   else if (event.type === 'settings') renderSettings(event.settings);
-  else if (event.type === 'open-settings') toggleSettings(true);
+  else if (event.type === 'open-settings') {
+    toggleBubble(true).then(() => toggleSettings(true)).catch((error) => showError(error.message));
+  }
   else if (event.type === 'mode') {
     currentMode = event.mode;
     currentThreadId = event.chat?.id || null;
@@ -1274,12 +1309,12 @@ for (const control of settingsMenu.querySelectorAll('input, select')) control.ad
 headerNewChatButton.addEventListener('click', startNewChat);
 chatMenuNewButton.addEventListener('click', startNewChat);
 for (const button of modeButtons) button.addEventListener('click', () => switchMode(button.dataset.mode));
-document.querySelector('#collapse').addEventListener('click', () => toggleBubble(false));
+document.querySelector('#collapse').addEventListener('click', () => toggleBubble(false).catch((error) => showError(error.message)));
 document.querySelector('#hide').addEventListener('click', async () => {
   if (recording) await stopDictation();
   api.hide();
 });
-openBubble.addEventListener('click', () => toggleBubble(true));
+openBubble.addEventListener('click', () => toggleBubble(true).catch((error) => showError(error.message)));
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!settingsMenu.hidden) toggleSettings(false);
@@ -1309,7 +1344,7 @@ async function installCharacterDrag() {
   }, true);
   el.addEventListener('pointerdown', async (event) => {
     if (event.button !== 0) return;
-    if (settingsState?.displayMode === 'fullscreen') return;
+    if (settingsState?.displayMode === 'fullscreen' && !petCollapsed) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const [x, y] = await api.getWindowPosition();
@@ -1326,7 +1361,9 @@ async function installCharacterDrag() {
   el.addEventListener('pointerup', (event) => {
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (!drag.moved) {
-      if (settingsState?.displayMode !== 'fullscreen') toggleBubble(bubble.hidden);
+      if (settingsState?.displayMode !== 'fullscreen' || petCollapsed) {
+        toggleBubble(bubble.hidden).catch((error) => showError(error.message));
+      }
       safePlay('ClickedOn', 'Acknowledge');
     }
     drag = null;
@@ -1348,7 +1385,7 @@ async function boot() {
   agent.show(true);
   positionAgent();
   installCharacterDrag();
-  toggleBubble(settingsState.bubbleOpenOnLaunch !== false);
+  await toggleBubble(settingsState.bubbleOpenOnLaunch !== false);
   safePlay('Wave', 'Greeting', 'GetAttention');
 }
 

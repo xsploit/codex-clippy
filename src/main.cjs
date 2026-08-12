@@ -59,6 +59,7 @@ let activeChatGptChatId = null;
 const liveRequests = new Map();
 let preferences;
 let compactWindowBounds = null;
+let fullscreenPetCollapsed = false;
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'clippy-state.json');
@@ -94,8 +95,8 @@ function applyRuntimeSettings() {
     mainWindow.setAlwaysOnTop(preferences.settings.alwaysOnTop, preferences.settings.alwaysOnTop ? 'floating' : 'normal');
     const wantsFullscreen = preferences.settings.displayMode === 'fullscreen';
     mainWindow.setResizable(true);
-    mainWindow.setSkipTaskbar(!wantsFullscreen);
-    if (wantsFullscreen) {
+    mainWindow.setSkipTaskbar(!wantsFullscreen || fullscreenPetCollapsed);
+    if (wantsFullscreen && !fullscreenPetCollapsed) {
       // Transparent frameless windows do not reliably enter native fullscreen
       // on Windows. A display-sized borderless window is deterministic and
       // preserves the click-through desktop-pet behavior.
@@ -428,6 +429,48 @@ function createWindow() {
             const fillsDisplay = ['x', 'y', 'width', 'height'].every((key) => windowBounds[key] === displayBounds[key]);
             if (!fillsDisplay) throw new Error('Fullscreen pet mode did not fill the display for capture.');
           }
+          if (process.env.CODEX_CLIPPY_DEMO_COLLAPSE_FULLSCREEN) {
+            await mainWindow.webContents.executeJavaScript(`document.querySelector('#collapse')?.click()`);
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              const bounds = mainWindow.getBounds();
+              const compact = compactWindowBounds && ['x', 'y', 'width', 'height'].every((key) => bounds[key] === compactWindowBounds[key]);
+              const collapsed = compact && await mainWindow.webContents.executeJavaScript(`
+                document.body.classList.contains('pet-collapsed') && document.querySelector('.bubble')?.hidden
+              `);
+              if (collapsed) break;
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            const collapsedBounds = mainWindow.getBounds();
+            const compact = compactWindowBounds && ['x', 'y', 'width', 'height'].every((key) => collapsedBounds[key] === compactWindowBounds[key]);
+            const collapsedUi = await mainWindow.webContents.executeJavaScript(`
+              document.body.classList.contains('pet-collapsed') && document.querySelector('.bubble')?.hidden
+            `);
+            if (!fullscreenPetCollapsed || !compact || !collapsedUi) {
+              throw new Error('Fullscreen pet did not collapse to compact transparent bounds.');
+            }
+            if (process.env.CODEX_CLIPPY_DEMO_COLLAPSE_FULLSCREEN === 'restore') {
+              await mainWindow.webContents.executeJavaScript(`document.querySelector('.open-bubble')?.click()`);
+              for (let attempt = 0; attempt < 40; attempt += 1) {
+                const displayBounds = screen.getDisplayMatching(mainWindow.getBounds()).bounds;
+                const windowBounds = mainWindow.getBounds();
+                const fillsDisplay = ['x', 'y', 'width', 'height'].every((key) => windowBounds[key] === displayBounds[key]);
+                const restored = fillsDisplay && await mainWindow.webContents.executeJavaScript(`
+                  !document.body.classList.contains('pet-collapsed') && !document.querySelector('.bubble')?.hidden
+                `);
+                if (restored) break;
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+              const restoredDisplay = screen.getDisplayMatching(mainWindow.getBounds()).bounds;
+              const restoredBounds = mainWindow.getBounds();
+              const fillsDisplay = ['x', 'y', 'width', 'height'].every((key) => restoredBounds[key] === restoredDisplay[key]);
+              const restoredUi = await mainWindow.webContents.executeJavaScript(`
+                !document.body.classList.contains('pet-collapsed') && !document.querySelector('.bubble')?.hidden
+              `);
+              if (fullscreenPetCollapsed || !fillsDisplay || !restoredUi) {
+                throw new Error('Collapsed pet did not restore fullscreen mode.');
+              }
+            }
+          }
           if (process.env.CODEX_CLIPPY_DEMO_OPEN_HISTORY === '1') {
             await mainWindow.webContents.executeJavaScript(`document.querySelector('#chat-history')?.click()`);
             for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -535,6 +578,7 @@ function createTray() {
     { label: 'New chat', click: () => newChat() },
     { label: 'Settings…', click: () => { mainWindow.showInactive(); emit({ type: 'open-settings' }); } },
     { label: preferences.settings.displayMode === 'fullscreen' ? 'Compact companion' : 'Fullscreen pet mode', click: () => {
+      fullscreenPetCollapsed = false;
       preferences = updateUserSettings(preferences, {
         displayMode: preferences.settings.displayMode === 'fullscreen' ? 'compact' : 'fullscreen',
       });
@@ -677,6 +721,7 @@ async function setMode(mode, notify = true) {
 ipcMain.handle('clippy:get-state', () => state);
 ipcMain.handle('clippy:get-settings', () => settingsPayload());
 ipcMain.handle('clippy:set-settings', (_event, patch) => {
+  fullscreenPetCollapsed = false;
   preferences = updateUserSettings(preferences, patch);
   savePreferences();
   applyRuntimeSettings();
@@ -684,6 +729,14 @@ ipcMain.handle('clippy:set-settings', (_event, patch) => {
   const settings = settingsPayload();
   emit({ type: 'settings', settings });
   return settings;
+});
+ipcMain.handle('clippy:set-pet-collapsed', (_event, collapsed) => {
+  fullscreenPetCollapsed = collapsed === true && preferences.settings.displayMode === 'fullscreen';
+  applyRuntimeSettings();
+  return {
+    collapsed: fullscreenPetCollapsed,
+    bounds: mainWindow?.getBounds() || null,
+  };
 });
 ipcMain.handle('clippy:get-composer-options', (_event, mode) => getComposerOptions(mode));
 ipcMain.handle('clippy:preview-local-image', (_event, filePath) => {
